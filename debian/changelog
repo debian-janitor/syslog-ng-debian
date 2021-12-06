@@ -1,6 +1,7 @@
-syslog-ng (3.28.1-4) UNRELEASED; urgency=medium
+syslog-ng (3.28.1-4) unstable; urgency=medium
 
   * Fix Criterion detection.
+  * Autotest on i386 as well.
 
  -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Sun, 05 Dec 2021 21:11:35 +0100
 
