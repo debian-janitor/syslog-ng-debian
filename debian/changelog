@@ -1,3 +1,9 @@
+syslog-ng (3.28.1-4) UNRELEASED; urgency=medium
+
+  * Fix Criterion detection.
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Sun, 05 Dec 2021 21:11:35 +0100
+
 syslog-ng (3.28.1-3) unstable; urgency=medium
 
   [ SZALAY Attila ]
