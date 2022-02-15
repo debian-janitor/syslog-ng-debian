@@ -51,6 +51,7 @@ cmake/.*$
 tests/python_functional/pytest.ini
 tests/python_functional/tox.ini
 tests/python_functional/.pre-commit-config.yaml
+.github/workflows/.*$
  LGPLv2.1+_SSL,non-balabit
 lib/timeutils/zonecache.[ch]$
 modules/secure-logging
@@ -60,6 +61,10 @@ modules/secure-logging/slogverify
 modules/secure-logging/slogkey
 lib/rewrite/rewrite-set-facility\.h
 lib/rewrite/tests/test_set_facility\.c
+lib/rewrite/rewrite-set-pri\.h
+lib/rewrite/rewrite-set-pri\.c
+lib/timeutils/timeutils\.h
+lib/logmsg/tests/dump_logmsg\.c
  LGPLv2.1+_SSL
 autogen\.sh$
 sub-configure\.sh$
@@ -82,9 +87,13 @@ modules/timestamp/rewrite-.*$
 modules/add-contextual-data/add-contextual-data-glob-selector\.[ch]$
 modules/add-contextual-data/tests/test_glob_selector\.c$
 modules/affile/tests/test_file_writer\.c$
+modules/afsocket/socket-options-unix\.[ch]$
+scl/fortigate/.*\.conf$
+scl/cee/.*\.conf$
  GPLv2+_SSL
 contib/config_option_database
 news/create-newsfile.py
+news/next-pr-id.py
 dev-utils/plugin_skeleton_creator/create_plugin.sh
 tests/functional
 tests/unit
@@ -96,7 +105,7 @@ tests/copyright/check.sh
 tests/python_functional
 modules/java/(tools|[^/]*$)
 modules/java-modules/(dummy|elastic-v2|hdfs|http|kafka|[^/]*$)
-modules/(afamqp|affile|afmongodb|afprog|afsmtp|afsocket|afsql|afstomp|afstreams|afuser|azure-auth-header|basicfuncs|cef|confgen|cryptofuncs|csvparser|timestamp|diskq|dbparser|geoip2|graphite|json|kvformat|linux-kmsg-format|pacctformat|pseudofile|python|redis|riemann|syslogformat|systemd-journal|getent|system-source|stardate|snmptrapd-parser|xml|openbsd|examples|kafka|afsnmp|[^/]*$)
+modules/(afamqp|affile|afmongodb|afprog|afsmtp|afsocket|afsql|afstomp|afstreams|afuser|azure-auth-header|basicfuncs|cef|confgen|cryptofuncs|csvparser|timestamp|diskq|dbparser|geoip2|graphite|json|kvformat|linux-kmsg-format|pacctformat|pseudofile|python|redis|riemann|syslogformat|systemd-journal|getent|system-source|stardate|snmptrapd-parser|xml|openbsd|examples|kafka|afsnmp|mqtt|regexp-parser|[^/]*$)
 modules/(add-contextual-data|tagsparser|map-value-pairs|hook-commands|appmodel|[^/]*$)
 modules/cryptofuncs/cryptofuncs\.c$
 modules/cryptofuncs/tests/test_cryptofuncs\.c$

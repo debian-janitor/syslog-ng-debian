@@ -26,13 +26,14 @@
 #include "mainloop-worker.h"
 #include "messages.h"
 #include "apphook.h"
+#include "ack-tracker/ack_tracker_factory.h"
 
 #include <iv.h>
 
 typedef struct _WakeupCondition
 {
-  GMutex *lock;
-  GCond *cond;
+  GMutex lock;
+  GCond cond;
   gboolean awoken;
 } WakeupCondition;
 
@@ -52,28 +53,28 @@ struct _LogThreadedSourceWorker
 static void
 wakeup_cond_init(WakeupCondition *cond)
 {
-  cond->lock = g_mutex_new();
-  cond->cond = g_cond_new();
+  g_mutex_init(&cond->lock);
+  g_cond_init(&cond->cond);
   cond->awoken = TRUE;
 }
 
 static void
 wakeup_cond_destroy(WakeupCondition *cond)
 {
-  g_cond_free(cond->cond);
-  g_mutex_free(cond->lock);
+  g_cond_clear(&cond->cond);
+  g_mutex_clear(&cond->lock);
 }
 
 static inline void
 wakeup_cond_lock(WakeupCondition *cond)
 {
-  g_mutex_lock(cond->lock);
+  g_mutex_lock(&cond->lock);
 }
 
 static inline void
 wakeup_cond_unlock(WakeupCondition *cond)
 {
-  g_mutex_unlock(cond->lock);
+  g_mutex_unlock(&cond->lock);
 }
 
 /* The wakeup lock must be held before calling this function. */
@@ -82,16 +83,16 @@ wakeup_cond_wait(WakeupCondition *cond)
 {
   cond->awoken = FALSE;
   while (!cond->awoken)
-    g_cond_wait(cond->cond, cond->lock);
+    g_cond_wait(&cond->cond, &cond->lock);
 }
 
 static inline void
 wakeup_cond_signal(WakeupCondition *cond)
 {
-  g_mutex_lock(cond->lock);
+  g_mutex_lock(&cond->lock);
   cond->awoken = TRUE;
-  g_cond_signal(cond->cond);
-  g_mutex_unlock(cond->lock);
+  g_cond_signal(&cond->cond);
+  g_mutex_unlock(&cond->lock);
 }
 
 static LogPipe *
@@ -105,8 +106,9 @@ log_threaded_source_worker_set_options(LogThreadedSourceWorker *self, LogThreade
                                        LogThreadedSourceWorkerOptions *options,
                                        const gchar *stats_id, const gchar *stats_instance)
 {
-  log_source_set_options(&self->super, &options->super, stats_id, stats_instance, TRUE, options->position_tracked,
+  log_source_set_options(&self->super, &options->super, stats_id, stats_instance, TRUE,
                          control->super.super.super.expr_node);
+  log_source_set_ack_tracker_factory(&self->super, ack_tracker_factory_ref(options->ack_tracker_factory));
 
   log_pipe_unref(&self->control->super.super.super);
   log_pipe_ref(&control->super.super.super);
@@ -119,6 +121,7 @@ log_threaded_source_worker_options_defaults(LogThreadedSourceWorkerOptions *opti
   log_source_options_defaults(&options->super);
   msg_format_options_defaults(&options->parse_options);
   options->parse_options.flags |= LP_SYSLOG_PROTOCOL;
+  options->ack_tracker_factory = NULL;
 }
 
 void
@@ -134,6 +137,7 @@ log_threaded_source_worker_options_destroy(LogThreadedSourceWorkerOptions *optio
 {
   log_source_options_destroy(&options->super);
   msg_format_options_destroy(&options->parse_options);
+  ack_tracker_factory_unref(options->ack_tracker_factory);
 }
 
 /* The wakeup lock must be held before calling this function. */
@@ -186,25 +190,11 @@ _worker_wakeup(LogSource *s)
   self->wakeup(self->control);
 }
 
-static void
-_start_worker_thread(gint type, gpointer data)
-{
-  LogThreadedSourceWorker *self =  (LogThreadedSourceWorker *) data;
-
-  main_loop_create_worker_thread((WorkerThreadFunc) log_threaded_source_worker_run,
-                                 (WorkerExitNotificationFunc) log_threaded_source_worker_request_exit,
-                                 self, &self->options);
-}
-
 static gboolean
 log_threaded_source_worker_init(LogPipe *s)
 {
-  LogThreadedSourceWorker *self = (LogThreadedSourceWorker *) s;
   if (!log_source_init(s))
     return FALSE;
-
-  /* The worker thread has to be started after CfgTree is completely initialized. */
-  register_application_hook(AH_CONFIG_CHANGED, _start_worker_thread, self);
 
   return TRUE;
 }
@@ -291,6 +281,18 @@ log_threaded_source_driver_free_method(LogPipe *s)
   log_src_driver_free(s);
 }
 
+gboolean
+log_threaded_source_driver_start_worker(LogPipe *s)
+{
+  LogThreadedSourceDriver *self = (LogThreadedSourceDriver *) s;
+
+  main_loop_create_worker_thread((WorkerThreadFunc) log_threaded_source_worker_run,
+                                 (WorkerExitNotificationFunc) log_threaded_source_worker_request_exit,
+                                 self->worker, &self->worker->options);
+
+  return TRUE;
+}
+
 void
 log_threaded_source_driver_set_worker_run_func(LogThreadedSourceDriver *self, LogThreadedSourceWorkerRunFunc run)
 {
@@ -372,4 +374,5 @@ log_threaded_source_driver_init_instance(LogThreadedSourceDriver *self, GlobalCo
   self->super.super.super.init = log_threaded_source_driver_init_method;
   self->super.super.super.deinit = log_threaded_source_driver_deinit_method;
   self->super.super.super.free_fn = log_threaded_source_driver_free_method;
+  self->super.super.super.on_config_inited = log_threaded_source_driver_start_worker;
 }

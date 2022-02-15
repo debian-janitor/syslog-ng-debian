@@ -24,7 +24,7 @@
 typedef struct _IterateState
 {
   TFSimpleFuncState super;
-  GStaticMutex mutex;
+  GMutex mutex;
   GString *current;
   LogTemplate *template;
 } IterateState;
@@ -63,7 +63,7 @@ tf_iterate_prepare(LogTemplateFunction *self, gpointer s, LogTemplate *parent, g
   state->current = g_string_new(argv[2]);
   g_option_context_free(ctx);
 
-  g_static_mutex_init(&state->mutex);
+  g_mutex_init(&state->mutex);
 
   return TRUE;
 }
@@ -74,7 +74,8 @@ update_current(LogTemplateFunction *self, IterateState *state, LogMessage *msg)
   gchar *current_value = g_strdup(state->current->str);
 
   g_string_assign(state->current, "");
-  log_template_format(state->template, msg, NULL, LTZ_LOCAL, 0, current_value, state->current);
+  LogTemplateEvalOptions options = {NULL, LTZ_LOCAL, 0, current_value};
+  log_template_format(state->template, msg, &options, state->current);
 
   g_free(current_value);
 }
@@ -84,10 +85,10 @@ tf_iterate_call(LogTemplateFunction *self, gpointer s, const LogTemplateInvokeAr
 {
   IterateState *state = (IterateState *)s;
 
-  g_static_mutex_lock(&state->mutex);
+  g_mutex_lock(&state->mutex);
   g_string_append(result, state->current->str);
   update_current(self, state, args->messages[0]);
-  g_static_mutex_unlock(&state->mutex);
+  g_mutex_unlock(&state->mutex);
 }
 
 static void
@@ -101,7 +102,7 @@ tf_iterate_free_state(gpointer s)
   state->current = NULL;
 
   tf_simple_func_free_state(&state->super);
-  g_static_mutex_free(&state->mutex);
+  g_mutex_clear(&state->mutex);
 }
 
 TEMPLATE_FUNCTION(IterateState, tf_iterate, tf_iterate_prepare, NULL,

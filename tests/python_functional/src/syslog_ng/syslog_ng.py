@@ -20,6 +20,7 @@
 # COPYING for details.
 #
 #############################################################################
+from src.syslog_ng.console_log_reader import ConsoleLogReader
 from src.syslog_ng.syslog_ng_cli import SyslogNgCli
 
 
@@ -28,8 +29,8 @@ class SyslogNg(object):
         self.instance_paths = instance_paths
         self.__syslog_ng_cli = SyslogNgCli(instance_paths, testcase_parameters)
 
-    def start(self, config):
-        self.__syslog_ng_cli.start(config)
+    def start(self, config, stderr=True, debug=True, trace=True, verbose=True, startup_debug=True, no_caps=True, config_path=None, persist_path=None, pid_path=None, control_socket_path=None):
+        return self.__syslog_ng_cli.start(config, stderr, debug, trace, verbose, startup_debug, no_caps, config_path, persist_path, pid_path, control_socket_path)
 
     def stop(self, unexpected_messages=None):
         self.__syslog_ng_cli.stop(unexpected_messages)
@@ -46,3 +47,11 @@ class SyslogNg(object):
 
     def is_process_running(self):
         return self.__syslog_ng_cli.is_process_running()
+
+    def wait_for_messages_in_console_log(self, expected_messages):
+        assert issubclass(type(expected_messages), list)
+        console_log_reader = ConsoleLogReader(self.instance_paths)
+        return console_log_reader.wait_for_messages_in_console_log(expected_messages)
+
+    def wait_for_message_in_console_log(self, expected_message):
+        return self.wait_for_messages_in_console_log([expected_message])

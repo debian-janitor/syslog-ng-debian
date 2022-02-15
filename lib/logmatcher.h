@@ -48,6 +48,9 @@ enum
   /* string flags */
   LMF_SUBSTRING = 0x0080,
   LMF_PREFIX = 0x0100,
+
+  /*  advanced LIBPCRE flags */
+  LMF_DUPNAMES = 0x00080000,
 };
 
 typedef struct _LogMatcherOptions
@@ -119,5 +122,7 @@ gboolean log_matcher_options_process_flag(LogMatcherOptions *self, const gchar *
 void log_matcher_options_defaults(LogMatcherOptions *options);
 void log_matcher_options_init(LogMatcherOptions *options);
 void log_matcher_options_destroy(LogMatcherOptions *options);
+
+void log_matcher_pcre_set_nv_prefix(LogMatcher *s, const gchar *prefix);
 
 #endif

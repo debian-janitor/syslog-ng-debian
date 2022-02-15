@@ -49,8 +49,6 @@ gchar *persist_file_path;
 gchar *assign_persist_name;
 gboolean relocate_all;
 gboolean display_version;
-gboolean debug_flag;
-gboolean verbose_flag;
 gboolean assign_help;
 
 static GOptionEntry cat_options[] =
@@ -133,7 +131,7 @@ open_queue(char *filename, LogQueue **lq, DiskQueueOptions *options)
     {
       options->disk_buf_size = 1;
       options->mem_buf_size = 128;
-      options->qout_size = 128;
+      options->qout_size = 1000;
       *lq = log_queue_disk_non_reliable_new(options, NULL);
     }
 
@@ -190,7 +188,8 @@ dqtool_cat(int argc, char *argv[])
       while ((log_msg = log_queue_pop_head(lq, &local_options)) != NULL)
         {
           /* format log */
-          log_template_format(template, log_msg, &configuration->template_options, LTZ_LOCAL, 0, NULL, msg);
+          LogTemplateEvalOptions eval_options = {&configuration->template_options, LTZ_LOCAL, 0, NULL};
+          log_template_format(template, log_msg, &eval_options, msg);
           log_msg_unref(log_msg);
           log_msg = NULL;
 
@@ -494,11 +493,6 @@ dqtool_relocate(int argc, char *argv[])
   if (!_relocate_validate_options())
     return 1;
 
-  if (!g_threads_got_initialized)
-    {
-      g_thread_init(NULL);
-    }
-
   main_thread_handle = get_thread_id();
 
   PersistState *state = persist_state_new(persist_file_path);
@@ -561,11 +555,6 @@ dqtool_assign(int argc, char *argv[])
 
   if (!_assign_validate_options())
     return 1;
-
-  if (!g_threads_got_initialized)
-    {
-      g_thread_init(NULL);
-    }
 
   main_thread_handle = get_thread_id();
 
@@ -691,9 +680,7 @@ main(int argc, char *argv[])
       if (strcmp(modes[mode].mode, mode_string) == 0)
         {
           ctx = g_option_context_new(mode_string);
-#if GLIB_CHECK_VERSION (2, 12, 0)
           g_option_context_set_summary(ctx, modes[mode].description);
-#endif
           g_option_context_add_main_entries(ctx, modes[mode].options, NULL);
           g_option_context_add_main_entries(ctx, dqtool_options, NULL);
           break;

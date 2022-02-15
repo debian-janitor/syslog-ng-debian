@@ -26,7 +26,10 @@ DIST_SUBDIRS		=
 AM_MAKEFLAGS		= --no-print-directory
 AM_YFLAGS		= -Wno-yacc -Wno-other -Werror=conflicts-sr -Werror=conflicts-rr
 
-AM_TESTS_ENVIRONMENT	= top_srcdir="$(top_srcdir)" CRITERION_TEST_PATTERN='!(*/*performance*)'
+AM_TESTS_ENVIRONMENT	= top_srcdir="$(top_srcdir)" CRITERION_TEST_PATTERN='!(*/*performance*)' ASAN_OPTIONS="detect_odr_violation=0"
+if ENABLE_SANITIZER
+LOG_COMPILER            = $(top_srcdir)/scripts/test-grep.sh
+endif
 
 ACLOCAL_AMFLAGS		= -I m4 --install
 
@@ -84,7 +87,12 @@ AM_CFLAGS += \
 	-Wold-style-definition \
 	-Wundef \
 	-Wignored-qualifiers \
-	-Woverride-init
+	-Woverride-init \
+	-Wfloat-conversion
+endif
+
+if ENABLE_DEBUG
+AM_CFLAGS += -DYYDEBUG=1
 endif
 
 TEST_CFLAGS		= -I$(top_srcdir)/libtest -DTOP_SRCDIR=\"$(abs_top_srcdir)\" $(AM_CFLAGS) $(CRITERION_CFLAGS)
@@ -132,6 +140,7 @@ endif
 
 ${check_PROGRAMS}: LDFLAGS+=${test_ldflags}
 
+noinst_PROGRAMS         =
 noinst_LIBRARIES	=
 noinst_DATA		=
 noinst_LTLIBRARIES	=
@@ -241,6 +250,7 @@ VALGRIND_FLAGS = \
 
 VALGRIND_memcheck_FLAGS = \
   --leak-check=full \
+  --trace-children=yes \
   --freelist-vol=200''000''000 \
   --freelist-big-blocks=10''000''000 \
   --malloc-fill=55 \

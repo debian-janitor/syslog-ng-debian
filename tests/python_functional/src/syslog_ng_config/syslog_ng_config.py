@@ -22,18 +22,23 @@
 #############################################################################
 import logging
 
+from src.common.file import File
 from src.common.operations import cast_to_list
-from src.driver_io.file.file_io import FileIO
 from src.syslog_ng_config.renderer import ConfigRenderer
 from src.syslog_ng_config.statement_group import StatementGroup
+from src.syslog_ng_config.statements.destinations.example_destination import ExampleDestination
 from src.syslog_ng_config.statements.destinations.file_destination import FileDestination
 from src.syslog_ng_config.statements.destinations.snmp_destination import SnmpDestination
 from src.syslog_ng_config.statements.filters.filter import Filter
 from src.syslog_ng_config.statements.logpath.logpath import LogPath
+from src.syslog_ng_config.statements.parsers.db_parser import DBParser
 from src.syslog_ng_config.statements.parsers.parser import Parser
+from src.syslog_ng_config.statements.rewrite.rewrite import SetPri
 from src.syslog_ng_config.statements.rewrite.rewrite import SetTag
 from src.syslog_ng_config.statements.sources.example_msg_generator_source import ExampleMsgGeneratorSource
 from src.syslog_ng_config.statements.sources.file_source import FileSource
+from src.syslog_ng_config.statements.sources.internal_source import InternalSource
+from src.syslog_ng_config.statements.sources.network_source import NetworkSource
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +67,10 @@ class SyslogNgConfig(object):
         else:
             rendered_config = ConfigRenderer(self.__syslog_ng_config).get_rendered_config()
         logger.info("Generated syslog-ng config\n{}\n".format(rendered_config))
-        FileIO(config_path).rewrite(rendered_config)
+
+        f = File(config_path)
+        with f.open('w+') as config_file:
+            config_file.write(rendered_config)
 
     def set_version(self, version):
         self.__syslog_ng_config["version"] = version
@@ -82,8 +90,17 @@ class SyslogNgConfig(object):
     def create_example_msg_generator_source(self, **options):
         return ExampleMsgGeneratorSource(**options)
 
+    def create_internal_source(self, **options):
+        return InternalSource(**options)
+
+    def create_network_source(self, **options):
+        return NetworkSource(**options)
+
     def create_rewrite_set_tag(self, tag, **options):
         return SetTag(tag, **options)
+
+    def create_rewrite_set_pri(self, pri, **options):
+        return SetPri(pri, **options)
 
     def create_filter(self, **options):
         return Filter([], **options)
@@ -94,14 +111,26 @@ class SyslogNgConfig(object):
     def create_checkpoint_parser(self, **options):
         return Parser("checkpoint-parser", **options)
 
+    def create_panos_parser(self, **options):
+        return Parser("panos-parser", **options)
+
+    def create_regexp_parser(self, **options):
+        return Parser("regexp-parser", **options)
+
     def create_syslog_parser(self, **options):
         return Parser("syslog-parser", **options)
 
     def create_file_destination(self, **options):
         return FileDestination(**options)
 
+    def create_example_destination(self, **options):
+        return ExampleDestination(**options)
+
     def create_snmp_destination(self, **options):
         return SnmpDestination(**options)
+
+    def create_db_parser(self, config, **options):
+        return DBParser(config, **options)
 
     def create_logpath(self, statements=None, flags=None):
         logpath = self.__create_logpath_with_conversion(statements, flags)

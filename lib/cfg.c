@@ -256,10 +256,10 @@ cfg_find_plugin(GlobalConfig *cfg, gint plugin_type, const gchar *plugin_name)
 /* construct a plugin instance by parsing its relevant portion from the
  * configuration file */
 gpointer
-cfg_parse_plugin(GlobalConfig *cfg, Plugin *plugin, YYLTYPE *yylloc, gpointer arg)
+cfg_parse_plugin(GlobalConfig *cfg, Plugin *plugin, CFG_LTYPE *yylloc, gpointer arg)
 {
   CfgTokenBlock *block;
-  YYSTYPE token;
+  CFG_STYPE token;
 
 
   /* we add two tokens to an inserted token-block:
@@ -365,7 +365,18 @@ cfg_init(GlobalConfig *cfg)
   log_template_options_init(&cfg->template_options, cfg);
   if (!cfg_init_modules(cfg))
     return FALSE;
-  return cfg_tree_start(&cfg->tree);
+  if (!cfg_tree_start(&cfg->tree))
+    return FALSE;
+
+  /*
+   * TLDR: A half-initialized pipeline turned out to be really hard to deinitialize
+   * correctly when dedicated source/destination threads are spawned (because we
+   * would have to wait for workers to stop and guarantee some internal
+   * task/timer/fdwatch ordering in ivykis during this action).
+   * See: https://github.com/syslog-ng/syslog-ng/pull/3176#issuecomment-638849597
+   */
+  g_assert(cfg_tree_on_inited(&cfg->tree));
+  return TRUE;
 }
 
 gboolean
@@ -430,6 +441,13 @@ cfg_set_version(GlobalConfig *self, gint version)
 }
 
 gboolean
+cfg_set_current_version(GlobalConfig *self)
+{
+  msg_info("Setting current version as config version", evt_tag_str("version", VERSION_STR_CURRENT));
+  return cfg_set_version(self, VERSION_VALUE_CURRENT);
+}
+
+gboolean
 cfg_allow_config_dups(GlobalConfig *self)
 {
   const gchar *s;
@@ -479,7 +497,7 @@ cfg_new(gint version)
 
   dns_cache_options_defaults(&self->dns_cache_options);
   self->threaded = TRUE;
-  self->pass_unix_credentials = TRUE;
+  self->pass_unix_credentials = -1;
 
   log_template_options_defaults(&self->template_options);
   self->template_options.ts_format = TS_FMT_BSD;

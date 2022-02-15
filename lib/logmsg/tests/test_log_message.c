@@ -80,6 +80,7 @@ static void
 assert_log_msg_clear_clears_all_properties(LogMessage *message, NVHandle nv_handle,
                                            NVHandle sd_handle, const gchar *tag_name)
 {
+  message->flags |= LF_LOCAL + LF_UTF8 + LF_INTERNAL + LF_MARK;
   log_msg_clear(message);
 
   cr_assert_str_empty(log_msg_get_value(message, nv_handle, NULL),
@@ -91,6 +92,10 @@ assert_log_msg_clear_clears_all_properties(LogMessage *message, NVHandle nv_hand
   cr_assert_null(message->saddr, "Message still contains an saddr after log_msg_clear");
   cr_assert_not(log_msg_is_tag_by_name(message, tag_name),
                 "Message still contains a valid tag after log_msg_clear");
+  cr_assert((message->flags & LF_LOCAL) == 0, "Message still contains the 'local' flag after log_msg_clear");
+  cr_assert((message->flags & LF_UTF8) == 0, "Message still contains the 'utf8' flag after log_msg_clear");
+  cr_assert((message->flags & LF_MARK) == 0, "Message still contains the 'mark' flag after log_msg_clear");
+  cr_assert((message->flags & LF_INTERNAL) == 0, "Message still contains the 'internal' flag after log_msg_clear");
 }
 
 static void
@@ -183,6 +188,35 @@ Test(log_message, test_log_message_can_be_cleared)
                                              params->sd_handle, params->tag_name);
 
   log_message_test_params_free(params);
+}
+
+Test(log_message, test_log_msg_clear_handles_cloned_noninline_tags_properly)
+{
+  LogMessage *msg = _construct_log_message();
+
+  for (gint i = 0; i < 100; i++)
+    {
+      gchar tag_name[32];
+
+      g_snprintf(tag_name, sizeof(tag_name), "tag%d", i);
+      log_msg_set_tag_by_name(msg, tag_name);
+    }
+
+  LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
+  LogMessage *cloned = log_msg_clone_cow(msg, &path_options);
+
+  log_msg_clear(cloned);
+
+  for (gint i = 0; i < 100; i++)
+    {
+      gchar tag_name[32];
+
+      g_snprintf(tag_name, sizeof(tag_name), "tag%d", i);
+      cr_assert(log_msg_is_tag_by_name(cloned, tag_name) == FALSE);
+    }
+  log_msg_unref(cloned);
+  log_msg_unref(msg);
+
 }
 
 Test(log_message, test_rcptid_is_automatically_assigned_to_a_newly_created_log_message)
@@ -507,7 +541,7 @@ Test(log_message, test_message_size)
   cr_assert_eq(msg_size, log_msg_get_size(msg)); // Tag is not increased until tag id 65
 
   char *tag_name = strdup("00tagname");
-  // (*8 to convert ot bits) + no need plus 1 bcause we already added one tag: test_tag_storage
+  // (*8 to convert to bits) + no need plus 1 bcause we already added one tag: test_tag_storage
   for (int i = 0; i < GLIB_SIZEOF_LONG*8; i++)
     {
       sprintf(tag_name, "%dtagname", i);
@@ -537,4 +571,74 @@ Test(log_message, when_get_indirect_value_with_null_value_len_abort_instead_of_s
   log_msg_get_value(params->message, indirect, NULL);
 
   log_message_test_params_free(params);
+}
+
+Test(log_message, test_cow_writing_cloned_message)
+{
+  LogMessage *msg = _construct_log_message();
+  log_msg_set_value_by_name(msg, "orig_name", "orig_value", -1);
+
+  LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
+  LogMessage *cloned = log_msg_clone_cow(msg, &path_options);
+
+  log_msg_set_value_by_name(cloned, "cloned_name", "cloned_value", -1);
+  log_msg_set_value_by_name(cloned, "orig_name", "modified_value", -1);
+
+  cr_assert_str_eq(log_msg_get_value_by_name(msg, "orig_name", NULL), "orig_value",
+                   "Modifications on a COW-cloned message should not leak into the original message; actual: %s, expected: %s",
+                   log_msg_get_value_by_name(msg, "orig_name", NULL), "orig_value");
+
+  NVHandle cloned_name = log_msg_get_value_handle("cloned_name");
+  gssize value_length;
+  cr_assert_null(log_msg_get_value_if_set(msg, cloned_name, &value_length),
+                 "Modifications on a COW-cloned message should not leak into the original message");
+
+  log_msg_unref(cloned);
+  log_msg_unref(msg);
+}
+
+
+Test(log_message, test_cow_make_writable)
+{
+  LogMessage *msg = _construct_log_message();
+  log_msg_set_value_by_name(msg, "orig_name", "orig_value", -1);
+
+  log_msg_write_protect(msg);
+  cr_assert(log_msg_is_write_protected(msg));
+
+  LogMessage *orig_msg = log_msg_ref(msg);
+
+  LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
+  log_msg_make_writable(&msg, &path_options);
+
+  log_msg_set_value_by_name(msg, "orig_name2", "orig_value2", -1);
+
+  NVHandle orig_name2 = log_msg_get_value_handle("orig_name2");
+  gssize value_length;
+  cr_assert_null(log_msg_get_value_if_set(orig_msg, orig_name2, &value_length),
+                 "Modifications on a COW-cloned message should not leak into the original message");
+
+  log_msg_unref(orig_msg);
+  log_msg_unref(msg);
+}
+
+Test(log_message, test_cow_unset_value)
+{
+  LogMessage *msg = _construct_log_message();
+  log_msg_set_value_by_name(msg, "orig_name", "orig_value", -1);
+  log_msg_write_protect(msg);
+
+  LogMessage *orig_msg = log_msg_ref(msg);
+
+  LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
+  log_msg_make_writable(&msg, &path_options);
+
+  log_msg_unset_value_by_name(msg, "orig_name");
+
+  cr_assert_str_eq(log_msg_get_value_by_name(orig_msg, "orig_name", NULL), "orig_value",
+                   "Unsetting a value in a COW-cloned message should not unset the value in the original message; actual: %s, expected: %s",
+                   log_msg_get_value_by_name(orig_msg, "orig_name", NULL), "orig_value");
+
+  log_msg_unref(orig_msg);
+  log_msg_unref(msg);
 }

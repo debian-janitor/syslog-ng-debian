@@ -25,6 +25,8 @@
 #include "python-main.h"
 #include "python-fetcher.h"
 #include "python-source.h"
+#include "python-bookmark.h"
+#include "python-ack-tracker.h"
 #include "mainloop-worker.h"
 #include "mainloop.h"
 #include "python-persist.h"
@@ -38,7 +40,7 @@ MainLoopOptions main_loop_options = {0};
 static PyObject *_python_main;
 static PyObject *_python_main_dict;
 
-YYLTYPE yyltype;
+CFG_LTYPE yyltype;
 GlobalConfig *empty_cfg;
 
 static void
@@ -47,9 +49,11 @@ _py_init_interpreter(void)
   Py_Initialize();
   py_init_argv();
 
-  PyEval_InitThreads();
+  py_init_threads();
   py_log_fetcher_init();
   py_log_source_init();
+  py_bookmark_init();
+  py_ack_tracker_init();
   PyEval_SaveThread();
 }
 
@@ -75,7 +79,6 @@ void setup(void)
   _init_python_main();
 
   empty_cfg = cfg_new_snippet();
-  empty_cfg->filename  = g_strdup("dummy");
 }
 
 void teardown(void)

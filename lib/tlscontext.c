@@ -27,6 +27,7 @@
 #include "compat/openssl_support.h"
 #include "secret-storage/secret-storage.h"
 
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -253,7 +254,7 @@ tls_session_verify_callback(int ok, X509_STORE_CTX *ctx)
           ok = 1;
           break;
         default:
-          msg_notice("Error occured during certificate validation",
+          msg_notice("Error occurred during certificate validation",
                      evt_tag_int("error", X509_STORE_CTX_get_error(ctx)),
                      tls_context_format_location_tag(self->ctx));
           break;
@@ -424,9 +425,6 @@ tls_context_setup_verify_mode(TLSContext *self)
 
   switch (self->verify_mode)
     {
-    case TVM_NONE:
-      verify_mode = SSL_VERIFY_NONE;
-      break;
     case TVM_OPTIONAL | TVM_UNTRUSTED:
       verify_mode = SSL_VERIFY_NONE;
       break;
@@ -572,10 +570,6 @@ _load_dh_fallback(TLSContext *self)
 static gboolean
 tls_context_setup_ecdh(TLSContext *self)
 {
-  /* server only */
-  if (self->mode != TM_SERVER)
-    return TRUE;
-
   if (!_set_optional_ecdh_curve_list(self->ssl_ctx, self->ecdh_curve_list))
     return FALSE;
 
@@ -914,11 +908,10 @@ tls_verifier_unref(TLSVerifier *self)
 gboolean
 tls_context_set_verify_mode_by_name(TLSContext *self, const gchar *mode_str)
 {
-  if (strcasecmp(mode_str, "none") == 0)
-    self->verify_mode = TVM_NONE;
-  else if (strcasecmp(mode_str, "optional-trusted") == 0 || strcasecmp(mode_str, "optional_trusted") == 0)
+  if (strcasecmp(mode_str, "optional-trusted") == 0 || strcasecmp(mode_str, "optional_trusted") == 0)
     self->verify_mode = TVM_OPTIONAL | TVM_TRUSTED;
-  else if (strcasecmp(mode_str, "optional-untrusted") == 0 || strcasecmp(mode_str, "optional_untrusted") == 0)
+  else if (strcasecmp(mode_str, "optional-untrusted") == 0 || strcasecmp(mode_str, "optional_untrusted") == 0
+           || strcasecmp(mode_str, "none") == 0)
     self->verify_mode = TVM_OPTIONAL | TVM_UNTRUSTED;
   else if (strcasecmp(mode_str, "required-trusted") == 0 || strcasecmp(mode_str, "required_trusted") == 0)
     self->verify_mode = TVM_REQUIRED | TVM_TRUSTED;
@@ -1184,11 +1177,17 @@ tls_verify_certificate_name(X509 *cert, const gchar *host_name)
                 }
               else if (gen_name->type == GEN_IPADD)
                 {
-                  char *dotted_ip = inet_ntoa(*(struct in_addr *) gen_name->d.iPAddress->data);
+                  gchar dotted_ip[64] = {0};
+                  int addr_family = AF_INET;
+                  if (gen_name->d.iPAddress->length == 16)
+                    addr_family = AF_INET6;
 
-                  g_strlcpy(pattern_buf, dotted_ip, sizeof(pattern_buf));
-                  found = TRUE;
-                  result = strcasecmp(host_name, pattern_buf) == 0;
+                  if (inet_ntop(addr_family, gen_name->d.iPAddress->data, dotted_ip, sizeof(dotted_ip)))
+                    {
+                      g_strlcpy(pattern_buf, dotted_ip, sizeof(pattern_buf));
+                      found = TRUE;
+                      result = strcasecmp(host_name, pattern_buf) == 0;
+                    }
                 }
             }
           sk_GENERAL_NAME_free(alt_names);

@@ -47,13 +47,13 @@ _next_token(void)
   cfg_parser_mock_next_token(parser);
 }
 
-static YYSTYPE *
+static CFG_STYPE *
 _current_token(void)
 {
   return parser->yylval;
 }
 
-static YYLTYPE *
+static CFG_LTYPE *
 _current_lloc(void)
 {
   return parser->yylloc;
@@ -312,13 +312,6 @@ Test(lexer, at_version_stores_config_version_in_parsed_version_in_hex_form)
   parser->lexer->ignore_pragma = FALSE;
 
   cfg_set_version_without_validation(configuration, 0);
-  _input("@version: 3.28\n\
-foo\n");
-  assert_parser_identifier("foo");
-  cr_assert_eq(configuration->user_version, 0x031c,
-               "@version parsing mismatch, value %04x expected %04x", configuration->user_version, 0x031c);
-
-  cfg_set_version_without_validation(configuration, 0);
   _input("@version: 3.1\n\
 bar\n");
   assert_parser_identifier("bar");
@@ -331,6 +324,18 @@ baz\n");
   assert_parser_identifier("baz");
   cr_assert_eq(configuration->user_version, 0x0305,
                "@version parsing mismatch, value %04x expected %04x", configuration->user_version, 0x0305);
+}
+
+Test(lexer, current_version)
+{
+  parser->lexer->ignore_pragma = FALSE;
+
+  cfg_set_version_without_validation(configuration, 0);
+  _input("@version: current\n\
+foo\n");
+  assert_parser_identifier("foo");
+  cr_assert_eq(configuration->user_version, VERSION_VALUE_CURRENT,
+               "@version parsing mismatch, value %04x expected %04x", configuration->user_version, VERSION_VALUE_CURRENT);
 }
 
 Test(lexer, test_lexer_others)
@@ -497,6 +502,14 @@ Test(lexer, generator_plugins_are_expanded)
   _input("fake-generator();\n");
   assert_parser_identifier("fake_generator_content");
   cfg_lexer_pop_context(lexer);
+}
+
+Test(lexer, context_name_lookup)
+{
+  for (int i=LL_CONTEXT_MAX-1; i >= 1; --i)
+    {
+      cr_assert_eq(i, cfg_lexer_lookup_context_type_by_name(cfg_lexer_lookup_context_name_by_type(i)));
+    }
 }
 
 static void

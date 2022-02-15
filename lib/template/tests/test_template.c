@@ -41,8 +41,8 @@
 #include <stdio.h>
 #include <string.h>
 
-GCond *thread_ping;
-GMutex *thread_lock;
+GCond thread_ping;
+GMutex thread_lock;
 gboolean thread_start;
 
 static gpointer
@@ -58,15 +58,16 @@ format_template_thread(gpointer s)
   scratch_buffers_allocator_init();
 
 
-  g_mutex_lock(thread_lock);
+  g_mutex_lock(&thread_lock);
   while (!thread_start)
-    g_cond_wait(thread_ping, thread_lock);
-  g_mutex_unlock(thread_lock);
+    g_cond_wait(&thread_ping, &thread_lock);
+  g_mutex_unlock(&thread_lock);
 
   result = g_string_sized_new(0);
+  LogTemplateEvalOptions options = {NULL, LTZ_SEND, 5555, NULL};
   for (i = 0; i < 10000; i++)
     {
-      log_template_format(templ, msg, NULL, LTZ_SEND, 5555, NULL, result);
+      log_template_format(templ, msg, &options, result);
       cr_assert_str_eq(result->str, expected, "multi-threaded formatting yielded invalid result (iteration: %d)", i);
       scratch_buffers_explicit_gc();
     }
@@ -91,24 +92,24 @@ assert_template_format_multi_thread(const gchar *template, const gchar *expected
   args[2] = (gpointer) expected;
 
   thread_start = FALSE;
-  thread_ping = g_cond_new();
-  thread_lock = g_mutex_new();
+  g_cond_init(&thread_ping);
+  g_mutex_init(&thread_lock);
   args[1] = templ;
   for (i = 0; i < 16; i++)
     {
-      threads[i] = g_thread_create(format_template_thread, args, TRUE, NULL);
+      threads[i] = g_thread_new(NULL, format_template_thread, args);
     }
 
   thread_start = TRUE;
-  g_mutex_lock(thread_lock);
-  g_cond_broadcast(thread_ping);
-  g_mutex_unlock(thread_lock);
+  g_mutex_lock(&thread_lock);
+  g_cond_broadcast(&thread_ping);
+  g_mutex_unlock(&thread_lock);
   for (i = 0; i < 16; i++)
     {
       g_thread_join(threads[i]);
     }
-  g_cond_free(thread_ping);
-  g_mutex_free(thread_lock);
+  g_cond_clear(&thread_ping);
+  g_mutex_clear(&thread_lock);
   log_template_unref(templ);
   log_msg_unref(msg);
 }
@@ -309,9 +310,9 @@ Test(template, test_escaping)
 {
   assert_template_format_with_escaping("${APP.QVALUE}", FALSE, "\"value\"");
   assert_template_format_with_escaping("${APP.QVALUE}", TRUE, "\\\"value\\\"");
-  assert_template_format_with_escaping("$(if (\"${APP.VALUE}\" == \"value\") \"${APP.QVALUE}\" \"${APP.QVALUE}\")",
+  assert_template_format_with_escaping("$(if (\"${APP.VALUE}\" eq \"value\") \"${APP.QVALUE}\" \"${APP.QVALUE}\")",
                                        FALSE, "\"value\"");
-  assert_template_format_with_escaping("$(if (\"${APP.VALUE}\" == \"value\") \"${APP.QVALUE}\" \"${APP.QVALUE}\")",
+  assert_template_format_with_escaping("$(if (\"${APP.VALUE}\" eq \"value\") \"${APP.QVALUE}\" \"${APP.QVALUE}\")",
                                        TRUE, "\\\"value\\\"");
 }
 
@@ -348,35 +349,122 @@ Test(template, test_template_function_args)
                          "49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64");
 }
 
+static void
+assert_template_trivial_value(const gchar *template_code, LogMessage *msg, const gchar *expected_value)
+{
+  LogTemplate *template = compile_template(template_code, FALSE);
+
+  cr_assert(log_template_is_trivial(template));
+
+  const gchar *trivial_value = log_template_get_trivial_value(template, msg, NULL);
+  cr_assert_str_eq(trivial_value, expected_value);
+
+  GString *formatted_value = g_string_sized_new(64);
+  log_template_format(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value);
+  cr_assert_str_eq(trivial_value, formatted_value->str,
+                   "Formatted and trivial value does not match: '%s' - '%s'", trivial_value, formatted_value->str);
+
+  g_string_free(formatted_value, TRUE);
+  log_template_unref(template);
+}
+
+
 Test(template, test_single_values_and_literal_strings_are_considered_trivial)
 {
-  LogTemplate *template;
   LogMessage *msg = create_sample_message();
 
-  template = compile_template("literal", FALSE);
-  cr_assert(log_template_is_trivial(template));
-  cr_assert_str_eq(log_template_get_trivial_value(template, msg, NULL), "literal");
-  log_template_unref(template);
+  assert_template_trivial_value("", msg, "");
+  assert_template_trivial_value(" ", msg, " ");
+  assert_template_trivial_value("literal", msg, "literal");
+  assert_template_trivial_value("$1", msg, "first-match");
+  assert_template_trivial_value("$MSG", msg, "árvíztűrőtükörfúrógép");
+  assert_template_trivial_value("$HOST", msg, "bzorp");
+  assert_template_trivial_value("${APP.VALUE}", msg, "value");
 
-  template = compile_template("$1", FALSE);
-  cr_assert(log_template_is_trivial(template));
-  cr_assert_str_eq(log_template_get_trivial_value(template, msg, NULL), "first-match");
-  log_template_unref(template);
-
-  template = compile_template("$MSG", FALSE);
-  cr_assert(log_template_is_trivial(template));
-  cr_assert_str_eq(log_template_get_trivial_value(template, msg, NULL), "árvíztűrőtükörfúrógép");
-  log_template_unref(template);
-
-  template = compile_template("$HOST", FALSE);
-  cr_assert(log_template_is_trivial(template));
-  cr_assert_str_eq(log_template_get_trivial_value(template, msg, NULL), "bzorp");
-  log_template_unref(template);
-
-  template = compile_template("${APP.VALUE}", FALSE);
-  cr_assert(log_template_is_trivial(template));
-  cr_assert_str_eq(log_template_get_trivial_value(template, msg, NULL), "value");
+  LogTemplate *template = log_template_new(configuration, NULL);
+  cr_assert_not(log_template_compile(template, "$1 $2 ${MSG invalid", NULL));
+  cr_assert(log_template_is_trivial(template), "Invalid templates are trivial");
+  cr_assert(g_str_has_prefix(log_template_get_trivial_value(template, NULL, NULL), "error in template"));
   log_template_unref(template);
 
   log_msg_unref(msg);
+}
+
+Test(template, test_non_trivial_templates)
+{
+  LogTemplate *template;
+
+  template = compile_template("$1", TRUE);
+  cr_assert_not(log_template_is_trivial(template), "Escaped template is not trivial");
+  log_template_unref(template);
+
+  template = compile_template("$1 $2", FALSE);
+  cr_assert_not(log_template_is_trivial(template), "Multi-element template is not trivial");
+  log_template_unref(template);
+
+  template = compile_template("$1 literal", FALSE);
+  cr_assert_not(log_template_is_trivial(template), "Multi-element template is not trivial");
+  log_template_unref(template);
+
+  template = compile_template("pre${1}", FALSE);
+  cr_assert_not(log_template_is_trivial(template), "Single-value template with preliminary text is not trivial");
+  log_template_unref(template);
+
+  template = compile_template("${MSG}@3", FALSE);
+  cr_assert_not(log_template_is_trivial(template), "Template referencing non-last context element is not trivial");
+  log_template_unref(template);
+
+  template = compile_template("$(echo test)", FALSE);
+  cr_assert_not(log_template_is_trivial(template), "Template functions are not trivial");
+  log_template_unref(template);
+
+  template = compile_template("$DATE", FALSE);
+  cr_assert_not(log_template_is_trivial(template), "Hard macros are not trivial");
+  log_template_unref(template);
+}
+
+static void
+assert_template_literal_value(const gchar *template_code, const gchar *expected_value)
+{
+  LogTemplate *template = compile_template(template_code, FALSE);
+
+  cr_assert(log_template_is_literal_string(template));
+
+  const gchar *literal_val = log_template_get_literal_value(template, NULL);
+  cr_assert_str_eq(literal_val, expected_value);
+
+  GString *formatted_value = g_string_sized_new(64);
+  LogMessage *msg = create_sample_message();
+  log_template_format(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, formatted_value);
+  cr_assert_str_eq(literal_val, formatted_value->str,
+                   "Formatted and literal value does not match: '%s' - '%s'", literal_val, formatted_value->str);
+
+  log_msg_unref(msg);
+  g_string_free(formatted_value, TRUE);
+  log_template_unref(template);
+}
+
+Test(template, test_literal_string_templates)
+{
+  assert_template_literal_value("", "");
+  assert_template_literal_value(" ", " ");
+  assert_template_literal_value("literal string", "literal string");
+  assert_template_literal_value("$$not a macro", "$not a macro");
+
+  LogTemplate *template = compile_template("a b c d $MSG", FALSE);
+  cr_assert_not(log_template_is_literal_string(template));
+  log_template_unref(template);
+}
+
+Test(template, test_compile_literal_string)
+{
+  LogTemplate *template = log_template_new(configuration, NULL);
+  log_template_compile_literal_string(template, "test literal");
+
+  cr_assert(log_template_is_literal_string(template));
+  cr_assert(log_template_is_trivial(template));
+
+  cr_assert_str_eq(log_template_get_literal_value(template, NULL), "test literal");
+
+  log_template_unref(template);
 }

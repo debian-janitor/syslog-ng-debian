@@ -27,7 +27,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-GStaticMutex nv_registry_lock = G_STATIC_MUTEX_INIT;
+static GMutex nv_registry_lock;
 
 const gchar *null_string = "";
 
@@ -50,7 +50,7 @@ nv_registry_alloc_handle(NVRegistry *self, const gchar *name)
   gsize len;
   NVHandle res = 0;
 
-  g_static_mutex_lock(&nv_registry_lock);
+  g_mutex_lock(&nv_registry_lock);
   p = g_hash_table_lookup(self->name_map, name);
   if (p)
     {
@@ -65,7 +65,7 @@ nv_registry_alloc_handle(NVRegistry *self, const gchar *name)
   if (len > 255)
     {
       msg_error("Value names cannot be longer than 255 characters, "
-                "this value will always expand to the emptry string",
+                "this value will always expand to the empty string",
                 evt_tag_str("value", name));
       goto exit;
     }
@@ -88,7 +88,7 @@ nv_registry_alloc_handle(NVRegistry *self, const gchar *name)
   g_hash_table_insert(self->name_map, g_strdup(name), GUINT_TO_POINTER(self->names->len));
   res = self->names->len;
 exit:
-  g_static_mutex_unlock(&nv_registry_lock);
+  g_mutex_unlock(&nv_registry_lock);
   return res;
 }
 
@@ -100,9 +100,9 @@ exit:
 void
 nv_registry_add_alias(NVRegistry *self, NVHandle handle, const gchar *alias)
 {
-  g_static_mutex_lock(&nv_registry_lock);
+  g_mutex_lock(&nv_registry_lock);
   g_hash_table_insert(self->name_map, g_strdup(alias), GUINT_TO_POINTER((glong) handle));
-  g_static_mutex_unlock(&nv_registry_lock);
+  g_mutex_unlock(&nv_registry_lock);
 }
 
 void

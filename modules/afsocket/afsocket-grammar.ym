@@ -31,7 +31,6 @@
 
 #include "afsocket.h"
 #include "cfg-parser.h"
-#include "afsocket-grammar.h"
 #include "afunix-source.h"
 #include "afunix-dest.h"
 #include "afinet-source.h"
@@ -39,8 +38,9 @@
 #include "messages.h"
 #include "syslog-names.h"
 #include "plugin.h"
-#include "cfg-grammar.h"
+#include "cfg-grammar-internal.h"
 #include "socket-options-inet.h"
+#include "socket-options-unix.h"
 #include "transport-mapper-inet.h"
 #include "service-management.h"
 
@@ -117,7 +117,7 @@ systemd_syslog_grammar_set_source_driver(SystemDSyslogSourceDriver *sd)
 
 }
 
-%name-prefix "afsocket_"
+%define api.prefix {afsocket_}
 
 /* this parameter is needed in order to instruct bison to use a complete
  * argument list for yylex/yyerror */
@@ -149,6 +149,7 @@ systemd_syslog_grammar_set_source_driver(SystemDSyslogSourceDriver *sd)
 %token KW_TCP_KEEPALIVE_TIME
 %token KW_TCP_KEEPALIVE_PROBES
 %token KW_TCP_KEEPALIVE_INTVL
+%token KW_SO_PASSCRED
 %token KW_LISTEN_BACKLOG
 %token KW_SPOOF_SOURCE
 %token KW_SPOOF_SOURCE_MAX_MSGLEN
@@ -236,7 +237,7 @@ start
         : driver
           {
             *instance = $1;
-            if (yychar != YYEMPTY)
+            if (yychar != AFSOCKET_EMPTY)
               cfg_lexer_unput_token(lexer, &yylval);
             YYACCEPT;
           }
@@ -287,7 +288,7 @@ source_afunix_option
 	| source_afsocket_stream_params		{}
 	| source_reader_option			{}
 	| source_driver_option
-	| socket_option				{}
+	| unix_socket_option			{}
 	| KW_OPTIONAL '(' yesno ')'		{ last_driver->optional = $3; }
 	| KW_PASS_UNIX_CREDENTIALS '(' yesno ')'
 	  {
@@ -392,8 +393,7 @@ source_afsocket_stream_params
 	| KW_MAX_CONNECTIONS '(' positive_integer ')'	 { afsocket_sd_set_max_connections(last_driver, $3); }
 	| KW_LISTEN_BACKLOG '(' positive_integer ')'	{ afsocket_sd_set_listen_backlog(last_driver, $3); }
 	| KW_DYNAMIC_WINDOW_SIZE '(' nonnegative_integer ')' { afsocket_sd_set_dynamic_window_size(last_driver, $3); }
-  | KW_DYNAMIC_WINDOW_STATS_FREQ '(' nonnegative_integer ')' { afsocket_sd_set_dynamic_window_stats_freq(last_driver, $3); }
-  | KW_DYNAMIC_WINDOW_STATS_FREQ '(' LL_FLOAT ')' { afsocket_sd_set_dynamic_window_stats_freq(last_driver, $3); }
+  | KW_DYNAMIC_WINDOW_STATS_FREQ '(' nonnegative_float ')' { afsocket_sd_set_dynamic_window_stats_freq(last_driver, $3); }
   | KW_DYNAMIC_WINDOW_REALLOC_TICKS '(' nonnegative_integer ')' { afsocket_sd_set_dynamic_window_realloc_ticks(last_driver, $3); }
 	;
 
@@ -878,15 +878,32 @@ socket_option
 	| KW_SO_REUSEPORT '(' yesno ')'             { last_sock_options->so_reuseport = $3; }
 	;
 
+unix_socket_option
+        : socket_option
+        | KW_SO_PASSCRED '(' yesno ')'              { socket_options_unix_set_so_passcred(last_sock_options, $3); }
+        ;
+
 inet_socket_option
 	: socket_option
 	| KW_IP_TTL '(' nonnegative_integer ')'               { ((SocketOptionsInet *) last_sock_options)->ip_ttl = $3; }
 	| KW_IP_TOS '(' nonnegative_integer ')'               { ((SocketOptionsInet *) last_sock_options)->ip_tos = $3; }
 	| KW_IP_FREEBIND '(' yesno ')'              { ((SocketOptionsInet *) last_sock_options)->ip_freebind = $3; }
 	| KW_INTERFACE '(' string ')'		    { socket_options_inet_set_interface_name((SocketOptionsInet *) last_sock_options, $3); free($3); }
-	| KW_TCP_KEEPALIVE_TIME '(' nonnegative_integer ')'   { ((SocketOptionsInet *) last_sock_options)->tcp_keepalive_time = $3; }
-	| KW_TCP_KEEPALIVE_INTVL '(' nonnegative_integer ')'  { ((SocketOptionsInet *) last_sock_options)->tcp_keepalive_intvl = $3; }
-	| KW_TCP_KEEPALIVE_PROBES '(' nonnegative_integer ')' { ((SocketOptionsInet *) last_sock_options)->tcp_keepalive_probes = $3; }
+	| KW_TCP_KEEPALIVE_TIME '(' nonnegative_integer ')'
+	  {
+	    CHECK_ERROR(socket_options_inet_set_tcp_keepalive_time((SocketOptionsInet *) last_sock_options, $3), @1,
+		            "The tcp-keepalive-time() option is not supported on this platform");
+	  }
+	| KW_TCP_KEEPALIVE_INTVL '(' nonnegative_integer ')'
+	  {
+	    CHECK_ERROR(socket_options_inet_set_tcp_keepalive_intvl((SocketOptionsInet *) last_sock_options, $3), @1,
+		            "The tcp-keepalive-intvl() option is not supported on this platform");
+	  }
+	| KW_TCP_KEEPALIVE_PROBES '(' nonnegative_integer ')'
+	  {
+	    CHECK_ERROR(socket_options_inet_set_tcp_keepalive_probes((SocketOptionsInet *) last_sock_options, $3), @1,
+		            "The tcp-keepalive-probes() option is not supported on this platform");
+	  }
 	;
 
 inet_ip_protocol_option

@@ -105,7 +105,7 @@ create_template(const gchar *template)
   LogTemplate *t;
 
   t = log_template_new(configuration, NULL);
-  log_template_compile(t, template, NULL);
+  cr_assert(log_template_compile(t, template, NULL));
   return t;
 }
 
@@ -213,7 +213,9 @@ testcase_with_backref_chk(const gchar *msg,
     }
   else
     {
-      cr_assert_eq(strncmp(value_msg, value, length), 0,
+      const gint value_len = strlen(value);
+      cr_assert_eq(length, value_len);
+      cr_assert_eq(strncmp(value_msg, value, value_len), 0,
                    "Filter test failed (value chk); msg='%s', expected_value='%s', value_in_msg='%s'",
                    msg, value, value_msg);
     }
@@ -238,5 +240,3 @@ teardown(void)
   scratch_buffers_explicit_gc();
   app_shutdown();
 }
-
-

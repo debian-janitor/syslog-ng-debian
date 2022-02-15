@@ -62,7 +62,6 @@ static CfgLexerKeyword http_keywords[] =
   { "body_prefix",      KW_BODY_PREFIX },
   { "body_suffix",      KW_BODY_SUFFIX },
   { "delimiter",        KW_DELIMITER },
-  { "workers",          KW_WORKERS },
   { NULL }
 };
 
@@ -77,4 +76,4 @@ CfgParser http_parser =
   .cleanup = (void (*)(gpointer)) log_pipe_unref,
 };
 
-CFG_PARSER_IMPLEMENT_LEXER_BINDING(http_, LogDriver **)
+CFG_PARSER_IMPLEMENT_LEXER_BINDING(http_, HTTP_, LogDriver **)
