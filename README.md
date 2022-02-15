@@ -1,5 +1,7 @@
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/syslog-ng/syslog-ng?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=body_badge)
-[![Build Status](https://travis-ci.org/syslog-ng/syslog-ng.svg?branch=master)](https://travis-ci.org/syslog-ng/syslog-ng)
+[![Build Status](https://github.com/syslog-ng/syslog-ng/actions/workflows/devshell.yml/badge.svg)](https://github.com/syslog-ng/syslog-ng/actions/workflows/devshell.yml)
+[![Binary packages](https://github.com/syslog-ng/syslog-ng/actions/workflows/packages.yml/badge.svg)](https://github.com/syslog-ng/syslog-ng/actions/workflows/packages.yml)
+[![Compile dbld-images](https://github.com/syslog-ng/syslog-ng/actions/workflows/dbld-images.yml/badge.svg)](https://github.com/syslog-ng/syslog-ng/actions/workflows/dbld-images.yml)
 
 syslog-ng
 =========
@@ -15,7 +17,7 @@ applications or forwarded by systemd) and writes everything to a single
 file:
 
 ```
-@version: 3.28
+@version: 3.35
 @include "scl.conf"
 
 log {
@@ -27,7 +29,7 @@ log {
 This one additionally processes logs from the network (TCP/514 by default):
 
 ```
-@version: 3.28
+@version: 3.35
 @include "scl.conf"
 
 log {
@@ -41,7 +43,7 @@ log {
 This config is designed for structured/application logging, using local submission via JSON, and outputting in key=value format:
 
 ```
-@version: 3.28
+@version: 3.35
 @include "scl.conf"
 
 log {
@@ -124,10 +126,17 @@ Releases and precompiled tarballs are available on [GitHub][github-repo].
 
  [github-repo]: https://github.com/syslog-ng/syslog-ng/releases
 
-To compile from source, the usual drill applies (assuming you have
-the required dependencies):
+To compile from source, the easiest is to use `dbld`, a docker based,
+self-hosted compile/build/release infrastructure within the source tree. See
+`dbld/README.md` for more information.
+
+For the brave souls who want to compile syslog-ng from scratch, the usual
+drill applies:
 
     $ ./configure && make && make install
+
+The extra effort in contrast with the dbld based build is the need to fetch
+and install all build dependencies of syslog-ng (of which there are a few).
 
 If you don't have a configure script (because of cloning from git, for example),
 run `./autogen.sh` to generate it.
@@ -151,12 +160,25 @@ Simply invoke the following command as root:
     # apt-get install syslog-ng
 
 The latest versions of syslog-ng are available for a wide range of Debian
-and Ubuntu releases and architectures from an
-[unofficial repository](https://build.opensuse.org/project/show/home:laszlo_budai:syslog-ng).
+and Ubuntu releases from our APT repository.
 
- [madhouse-repo]: http://asylum.madhouse-project.org/projects/debian/
+The packages and the APT repository are provided "as is" without warranty of any kind, on a best-effort level.
 
-For instructions on how to install syslog-ng on Debian/Ubuntu distributions, see the blog post [Installing the latest syslog-ng on Ubuntu and other DEB distributions](https://syslog-ng.com/blog/installing-the-latest-syslog-ng-on-ubuntu-and-other-deb-distributions/).
+Installation steps:
+
+1. Download and install the release signing key:
+
+    ```
+    wget -qO - https://ose-repo.syslog-ng.com/apt/syslog-ng-ose-pub.asc | sudo apt-key add -
+    ```
+
+2. Add the repository containing the latest stable build of syslog-ng to the APT sources. For example, on Ubuntu 20.04:
+
+    ```
+    echo "deb https://ose-repo.syslog-ng.com/apt/ stable ubuntu-focal" | sudo tee -a /etc/apt/sources.list.d/syslog-ng-ose.list
+    ```
+
+3. Run `apt-get update`
 
 ### Fedora
 

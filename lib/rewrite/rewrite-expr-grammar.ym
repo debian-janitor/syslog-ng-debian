@@ -30,17 +30,17 @@
 
 %code {
 
-#include "rewrite/rewrite-expr-grammar.h"
 #include "rewrite/rewrite-set-tag.h"
 #include "rewrite/rewrite-set.h"
 #include "rewrite/rewrite-unset.h"
 #include "rewrite/rewrite-subst.h"
 #include "rewrite/rewrite-groupset.h"
+#include "rewrite/rewrite-set-pri.h"
 #include "rewrite/rewrite-set-severity.h"
 #include "rewrite/rewrite-set-facility.h"
 #include "filter/filter-expr.h"
 #include "filter/filter-expr-parser.h"
-#include "cfg-grammar.h"
+#include "cfg-grammar-internal.h"
 #include "syslog-names.h"
 #include "plugin.h"
 
@@ -48,7 +48,7 @@
 
 }
 
-%name-prefix "rewrite_expr_"
+%define api.prefix {rewrite_expr_}
 %lex-param {CfgLexer *lexer}
 %parse-param {CfgLexer *lexer}
 %parse-param {LogExprNode **result}
@@ -69,11 +69,12 @@
 %token KW_VALUES
 %token KW_SET_SEVERITY
 %token KW_SET_FACILITY
+%token KW_SET_PRI
 
 %%
 
 start
-        : rewrite_expr_list log_last_junction        { *result = log_expr_node_append_tail($1, $2); if (yychar != YYEMPTY) { cfg_lexer_unput_token(lexer, &yylval); } YYACCEPT; }
+        : rewrite_expr_list log_last_junction        { *result = log_expr_node_append_tail($1, $2); if (yychar != REWRITE_EXPR_EMPTY) { cfg_lexer_unput_token(lexer, &yylval); } YYACCEPT; }
 	;
 
 rewrite_expr_list
@@ -130,6 +131,11 @@ rewrite_expr
             last_rewrite = log_rewrite_groupunset_new(configuration);
           }
           rewrite_groupset_opts ')'             { $$ = last_rewrite; }
+        | KW_SET_PRI '(' template_content
+          {
+            last_rewrite = log_rewrite_set_pri_new($3, configuration);
+            log_template_unref($3);
+          } rewrite_set_pri_opts ')'		{ $$ = last_rewrite; };
         | KW_SET_SEVERITY '(' template_content
           {
             last_rewrite = log_rewrite_set_severity_new($3, configuration);
@@ -203,6 +209,15 @@ rewrite_set_opt
 rewrite_expr_opts
         : rewrite_expr_opt rewrite_expr_opts
         |
+        ;
+
+rewrite_set_pri_opts
+        : rewrite_set_pri_opt rewrite_set_pri_opts
+        |
+        ;
+
+rewrite_set_pri_opt
+        : rewrite_condition_opt
         ;
 
 rewrite_set_severity_opts

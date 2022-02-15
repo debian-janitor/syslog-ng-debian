@@ -130,11 +130,12 @@ afsql_dd_set_database(LogDriver *s, const gchar *database)
 }
 
 void
-afsql_dd_set_table(LogDriver *s, const gchar *table)
+afsql_dd_set_table(LogDriver *s, LogTemplate *table_template)
 {
   AFSqlDestDriver *self = (AFSqlDestDriver *) s;
 
-  log_template_compile(self->table, table, NULL);
+  log_template_unref(self->table);
+  self->table = table_template;
 }
 
 void
@@ -750,7 +751,8 @@ afsql_dd_ensure_accessible_database_table(AFSqlDestDriver *self, LogMessage *msg
 {
   GString *table = g_string_sized_new(32);
 
-  log_template_format(self->table, msg, &self->template_options, LTZ_LOCAL, 0, NULL, table);
+  LogTemplateEvalOptions options = {&self->template_options, LTZ_LOCAL, 0, NULL};
+  log_template_format(self->table, msg, &options, table);
 
   if (!afsql_dd_ensure_table_is_syslogng_conform(self, table))
     {
@@ -796,9 +798,8 @@ afsql_dd_build_insert_command(AFSqlDestDriver *self, LogMessage *msg, GString *t
 
       if ((self->fields[i].flags & AFSQL_FF_DEFAULT) == 0 && self->fields[i].value != NULL)
         {
-          log_template_format(self->fields[i].value, msg,
-                              &self->template_options, LTZ_SEND, self->super.worker.instance.seq_num,
-                              NULL, value);
+          LogTemplateEvalOptions options = {&self->template_options, LTZ_SEND, self->super.worker.instance.seq_num, NULL};
+          log_template_format(self->fields[i].value, msg, &options, value);
           if (self->null_value && strcmp(self->null_value, value->str) == 0)
             {
               g_string_append(insert_command, "NULL");
@@ -1114,8 +1115,6 @@ afsql_dd_init(LogPipe *s)
   AFSqlDestDriver *self = (AFSqlDestDriver *) s;
   GlobalConfig *cfg = log_pipe_get_config(s);
 
-  if (!log_threaded_dest_driver_init_method(s))
-    return FALSE;
   if (!_update_legacy_persist_name_if_exists(self))
     return FALSE;
   if (!_initialize_dbi())
@@ -1137,12 +1136,15 @@ afsql_dd_init(LogPipe *s)
   if (!_init_fields_from_columns_and_values(self))
     return FALSE;
 
+  if (!log_threaded_dest_driver_init_method(s))
+    return FALSE;
+
   log_template_options_init(&self->template_options, cfg);
 
   if (afsql_dd_is_transaction_handling_enabled(self))
     log_threaded_dest_driver_set_batch_lines((LogDriver *)self, _batch_lines(self));
 
-  return log_threaded_dest_driver_start_workers(&self->super);
+  return TRUE;
 }
 
 static void
@@ -1209,7 +1211,7 @@ afsql_dd_new(GlobalConfig *cfg)
   self->ignore_tns_config = FALSE;
 
   self->table = log_template_new(configuration, NULL);
-  log_template_compile(self->table, "messages", NULL);
+  log_template_compile_literal_string(self->table, "messages");
   self->failed_message_counter = 0;
 
   self->session_statements = NULL;

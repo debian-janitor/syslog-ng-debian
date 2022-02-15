@@ -129,7 +129,7 @@ gboolean cfg_is_module_available(GlobalConfig *self, const gchar *module_name);
 void cfg_discover_candidate_modules(GlobalConfig *self);
 
 Plugin *cfg_find_plugin(GlobalConfig *cfg, gint plugin_type, const gchar *plugin_name);
-gpointer cfg_parse_plugin(GlobalConfig *cfg, Plugin *plugin, YYLTYPE *yylloc, gpointer arg);
+gpointer cfg_parse_plugin(GlobalConfig *cfg, Plugin *plugin, CFG_LTYPE *yylloc, gpointer arg);
 
 gboolean cfg_allow_config_dups(GlobalConfig *self);
 
@@ -142,6 +142,7 @@ gint cfg_ts_format_value(gchar *format);
 
 void cfg_set_version_without_validation(GlobalConfig *self, gint version);
 gboolean cfg_set_version(GlobalConfig *self, gint version);
+gboolean cfg_set_current_version(GlobalConfig *self);
 
 void cfg_set_global_paths(GlobalConfig *self);
 

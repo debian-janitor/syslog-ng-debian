@@ -33,7 +33,7 @@ typedef struct _AFFileDestWriter AFFileDestWriter;
 typedef struct _AFFileDestDriver
 {
   LogDestDriver super;
-  GStaticMutex lock;
+  GMutex lock;
   LogTemplate *filename_template;
   AFFileDestWriter *single_writer;
   gboolean filename_is_a_template;
@@ -50,8 +50,8 @@ typedef struct _AFFileDestDriver
   gboolean use_time_recvd;
 } AFFileDestDriver;
 
-AFFileDestDriver *affile_dd_new_instance(gchar *filename, GlobalConfig *cfg);
-LogDriver *affile_dd_new(gchar *filename, GlobalConfig *cfg);
+AFFileDestDriver *affile_dd_new_instance(LogTemplate *filename_template, GlobalConfig *cfg);
+LogDriver *affile_dd_new(LogTemplate *filename_template, GlobalConfig *cfg);
 
 void affile_dd_set_create_dirs(LogDriver *s, gboolean create_dirs);
 void affile_dd_set_fsync(LogDriver *s, gboolean enable);

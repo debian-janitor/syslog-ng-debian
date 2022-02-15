@@ -85,7 +85,7 @@ create_template(const gchar *type_hint_string, const gchar *template_string)
   LogTemplate *template;
 
   template = log_template_new(configuration, NULL);
-  log_template_compile(template, template_string, NULL);
+  cr_assert(log_template_compile(template, template_string, NULL));
   log_template_set_type_hint(template, type_hint_string, NULL);
   return template;
 }
@@ -129,7 +129,8 @@ testcase(const gchar *scope, const gchar *exclude, const gchar *expected)
 
   args[0] = &vp_keys_list;
   args[1] = &test_key_found;
-  value_pairs_foreach(vp, vp_keys_foreach, msg, 11, LTZ_LOCAL, &template_options, args);
+  LogTemplateEvalOptions options = {&template_options, LTZ_LOCAL, 11, NULL};
+  value_pairs_foreach(vp, vp_keys_foreach, msg, &options, args);
 
   cr_expect(test_key_found, "test.key is not found in the result set");
 
@@ -165,7 +166,8 @@ transformers_testcase(const gchar *scope, const gchar *transformed_keys, const g
 
   args[0] = &vp_keys_list;
   args[1] = &test_key_found;
-  value_pairs_foreach(vp, vp_keys_foreach, msg, 11, LTZ_LOCAL, &template_options, args);
+  LogTemplateEvalOptions options = {&template_options, LTZ_LOCAL, 11, NULL};
+  value_pairs_foreach(vp, vp_keys_foreach, msg, &options, args);
 
   assert_keys_match_expected(scope, vp_keys_list, expected);
 

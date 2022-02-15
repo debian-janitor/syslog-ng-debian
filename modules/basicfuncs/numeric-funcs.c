@@ -63,7 +63,7 @@ number_as_int(Number number)
   if (number.value_type == Integer)
     return number.value_data.raw_integer;
 
-  return number.value_data.raw_float;
+  return (gint64) number.value_data.raw_float;
 }
 
 void
@@ -350,7 +350,7 @@ tf_num_ceil(LogMessage *msg, gint argc, GString *argv[], GString *result)
       return;
     }
 
-  format_int64_padded(result, 0, ' ', 10, ceil(number_as_double(n)));
+  format_int64_padded(result, 0, ' ', 10, (gint64)ceil(number_as_double(n)));
 }
 
 TEMPLATE_FUNCTION_SIMPLE(tf_num_ceil);
@@ -377,7 +377,7 @@ tf_num_floor(LogMessage *msg, gint argc, GString *argv[], GString *result)
       return;
     }
 
-  format_int64_padded(result, 0, ' ', 10, floor(number_as_double(n)));
+  format_int64_padded(result, 0, ' ', 10, (gint64)floor(number_as_double(n)));
 }
 
 TEMPLATE_FUNCTION_SIMPLE(tf_num_floor);
@@ -389,10 +389,9 @@ _tf_num_parse_arg_with_message(const TFSimpleFuncState *state,
                                gint64 *number)
 {
   GString *formatted_template = scratch_buffers_alloc();
-  gint on_error = args->opts->on_error;
+  gint on_error = args->options->opts->on_error;
 
-  log_template_format(state->argv_templates[0], message, args->opts, args->tz,
-                      args->seq_num, args->context_id, formatted_template);
+  log_template_format(state->argv_templates[0], message, args->options, formatted_template);
 
   if (!parse_dec_number(formatted_template->str, number))
     {

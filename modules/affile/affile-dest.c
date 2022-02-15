@@ -91,13 +91,12 @@ static GList *affile_dest_drivers = NULL;
 struct _AFFileDestWriter
 {
   LogPipe super;
-  GStaticMutex lock;
+  GMutex lock;
   AFFileDestDriver *owner;
   gchar *filename;
   LogWriter *writer;
   time_t last_msg_stamp;
   time_t last_open_stamp;
-  time_t time_reopen;
   gboolean reopen_pending, queue_pending;
 };
 
@@ -121,7 +120,7 @@ affile_dw_reap(AFFileDestWriter *self)
 
   main_loop_assert_main_thread();
 
-  g_static_mutex_lock(&owner->lock);
+  g_mutex_lock(&owner->lock);
   if (!log_writer_has_pending_writes((LogWriter *) self->writer) && !self->queue_pending)
     {
       msg_verbose("Destination timed out, reaping",
@@ -129,7 +128,7 @@ affile_dw_reap(AFFileDestWriter *self)
                   evt_tag_str("filename", self->filename));
       affile_dd_reap_writer(self->owner, self);
     }
-  g_static_mutex_unlock(&owner->lock);
+  g_mutex_unlock(&owner->lock);
 }
 
 static gboolean
@@ -137,12 +136,7 @@ affile_dw_reopen(AFFileDestWriter *self)
 {
   int fd;
   struct stat st;
-  GlobalConfig *cfg;
   LogProtoClient *proto = NULL;
-
-  cfg = log_pipe_get_config(&self->super);
-  if (cfg)
-    self->time_reopen = cfg->time_reopen;
 
   msg_verbose("Initializing destination file writer",
               evt_tag_str("template", self->owner->filename_template->template),
@@ -257,23 +251,23 @@ affile_dw_queue(LogPipe *s, LogMessage *lm, const LogPathOptions *path_options)
 
   AFFileDestWriter *self = (AFFileDestWriter *) s;
 
-  g_static_mutex_lock(&self->lock);
+  g_mutex_lock(&self->lock);
   self->last_msg_stamp = cached_g_current_time_sec();
   if (self->last_open_stamp == 0)
     self->last_open_stamp = self->last_msg_stamp;
 
   if (!log_writer_opened(self->writer) &&
       !self->reopen_pending &&
-      (self->last_open_stamp < self->last_msg_stamp - self->time_reopen))
+      (self->last_open_stamp < self->last_msg_stamp - self->owner->writer_options.time_reopen))
     {
       self->reopen_pending = TRUE;
       /* if the file couldn't be opened, try it again every time_reopen seconds */
-      g_static_mutex_unlock(&self->lock);
+      g_mutex_unlock(&self->lock);
       affile_dw_reopen(self);
-      g_static_mutex_lock(&self->lock);
+      g_mutex_lock(&self->lock);
       self->reopen_pending = FALSE;
     }
-  g_static_mutex_unlock(&self->lock);
+  g_mutex_unlock(&self->lock);
 
   log_pipe_forward_msg(&self->super, lm, path_options);
 }
@@ -308,7 +302,7 @@ affile_dw_free(LogPipe *s)
 
   log_pipe_unref((LogPipe *) self->writer);
 
-  g_static_mutex_free(&self->lock);
+  g_mutex_clear(&self->lock);
   self->writer = NULL;
   g_free(self->filename);
   log_pipe_unref(&self->owner->super.super.super);
@@ -344,12 +338,11 @@ affile_dw_new(const gchar *filename, GlobalConfig *cfg)
   self->super.free_fn = affile_dw_free;
   self->super.queue = affile_dw_queue;
   self->super.notify = affile_dw_notify;
-  self->time_reopen = 60;
 
   /* we have to take care about freeing filename later.
      This avoids a move of the filename. */
   self->filename = g_strdup(filename);
-  g_static_mutex_init(&self->lock);
+  g_mutex_init(&self->lock);
   return self;
 }
 
@@ -374,8 +367,6 @@ static void
 affile_dd_register_reopen_hook(gint hook_type, gpointer user_data)
 {
   g_list_foreach(affile_dest_drivers, affile_dd_reopen_all_writers, NULL);
-
-  register_application_hook(AH_REOPEN_FILES, affile_dd_register_reopen_hook, NULL);
 }
 
 void
@@ -616,14 +607,15 @@ affile_dd_open_writer(gpointer args[])
     {
       if (!self->single_writer)
         {
-          next = affile_dw_new(self->filename_template->template, log_pipe_get_config(&self->super.super.super));
+          next = affile_dw_new(log_template_get_literal_value(self->filename_template, NULL),
+                               log_pipe_get_config(&self->super.super.super));
           affile_dw_set_owner(next, self);
           if (next && log_pipe_init(&next->super))
             {
               log_pipe_ref(&next->super);
-              g_static_mutex_lock(&self->lock);
+              g_mutex_lock(&self->lock);
               self->single_writer = next;
-              g_static_mutex_unlock(&self->lock);
+              g_mutex_unlock(&self->lock);
             }
           else
             {
@@ -663,9 +655,9 @@ affile_dd_open_writer(gpointer args[])
           else
             {
               log_pipe_ref(&next->super);
-              g_static_mutex_lock(&self->lock);
+              g_mutex_lock(&self->lock);
               g_hash_table_insert(self->writer_hash, next->filename, next);
-              g_static_mutex_unlock(&self->lock);
+              g_mutex_unlock(&self->lock);
             }
         }
       else
@@ -696,10 +688,10 @@ affile_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
       /* we need to lock single_writer in order to get a reference and
        * make sure it is not a stale pointer by the time we ref it */
 
-      g_static_mutex_lock(&self->lock);
+      g_mutex_lock(&self->lock);
       if (!self->single_writer)
         {
-          g_static_mutex_unlock(&self->lock);
+          g_mutex_unlock(&self->lock);
           next = main_loop_call((void *(*)(void *)) affile_dd_open_writer, args, TRUE);
         }
       else
@@ -707,7 +699,7 @@ affile_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
           next = self->single_writer;
           next->queue_pending = TRUE;
           log_pipe_ref(&next->super);
-          g_static_mutex_unlock(&self->lock);
+          g_mutex_unlock(&self->lock);
         }
     }
   else
@@ -715,9 +707,10 @@ affile_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
       GString *filename;
 
       filename = g_string_sized_new(32);
-      log_template_format(self->filename_template, msg, &self->writer_options.template_options, LTZ_LOCAL, 0, NULL, filename);
+      LogTemplateEvalOptions options = {&self->writer_options.template_options, LTZ_LOCAL, 0, NULL};
+      log_template_format(self->filename_template, msg, &options, filename);
 
-      g_static_mutex_lock(&self->lock);
+      g_mutex_lock(&self->lock);
       if (self->writer_hash)
         next = g_hash_table_lookup(self->writer_hash, filename->str);
       else
@@ -727,11 +720,11 @@ affile_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
         {
           log_pipe_ref(&next->super);
           next->queue_pending = TRUE;
-          g_static_mutex_unlock(&self->lock);
+          g_mutex_unlock(&self->lock);
         }
       else
         {
-          g_static_mutex_unlock(&self->lock);
+          g_mutex_unlock(&self->lock);
           args[1] = filename;
           next = main_loop_call((void *(*)(void *)) affile_dd_open_writer, args, TRUE);
         }
@@ -753,7 +746,7 @@ affile_dd_free(LogPipe *s)
 {
   AFFileDestDriver *self = (AFFileDestDriver *) s;
 
-  g_static_mutex_free(&self->lock);
+  g_mutex_clear(&self->lock);
   affile_dest_drivers = g_list_remove(affile_dest_drivers, self);
 
   /* NOTE: this must be NULL as deinit has freed it, otherwise we'd have circular references */
@@ -767,7 +760,7 @@ affile_dd_free(LogPipe *s)
 }
 
 AFFileDestDriver *
-affile_dd_new_instance(gchar *filename, GlobalConfig *cfg)
+affile_dd_new_instance(LogTemplate *filename_template, GlobalConfig *cfg)
 {
   AFFileDestDriver *self = g_new0(AFFileDestDriver, 1);
 
@@ -777,21 +770,20 @@ affile_dd_new_instance(gchar *filename, GlobalConfig *cfg)
   self->super.super.super.queue = affile_dd_queue;
   self->super.super.super.free_fn = affile_dd_free;
   self->super.super.super.generate_persist_name = affile_dd_format_persist_name;
-  self->filename_template = log_template_new(cfg, NULL);
-  log_template_compile(self->filename_template, filename, NULL);
+  self->filename_template = filename_template;
   log_writer_options_defaults(&self->writer_options);
   self->writer_options.mark_mode = MM_NONE;
   self->writer_options.stats_level = STATS_LEVEL1;
   self->writer_flags = LW_FORMAT_FILE;
 
-  if (strchr(filename, '$') != NULL)
+  if (!log_template_is_literal_string(filename_template))
     {
       self->filename_is_a_template = TRUE;
     }
   file_opener_options_defaults(&self->file_opener_options);
 
   affile_dd_set_time_reap(&self->super.super, self->filename_is_a_template ? -1 : 0);
-  g_static_mutex_init(&self->lock);
+  g_mutex_init(&self->lock);
 
   affile_dest_drivers = g_list_append(affile_dest_drivers, self);
 
@@ -799,9 +791,9 @@ affile_dd_new_instance(gchar *filename, GlobalConfig *cfg)
 }
 
 LogDriver *
-affile_dd_new(gchar *filename, GlobalConfig *cfg)
+affile_dd_new(LogTemplate *filename_template, GlobalConfig *cfg)
 {
-  AFFileDestDriver *self = affile_dd_new_instance(filename, cfg);
+  AFFileDestDriver *self = affile_dd_new_instance(filename_template, cfg);
 
   self->writer_flags |= LW_SOFT_FLOW_CONTROL;
   self->writer_options.stats_source = stats_register_type("file");
@@ -812,5 +804,11 @@ affile_dd_new(gchar *filename, GlobalConfig *cfg)
 void
 affile_dd_global_init(void)
 {
-  register_application_hook(AH_REOPEN_FILES, affile_dd_register_reopen_hook, NULL);
+  static gboolean initialized = FALSE;
+
+  if (!initialized)
+    {
+      register_application_hook(AH_REOPEN_FILES, affile_dd_register_reopen_hook, NULL, AHM_RUN_REPEAT);
+      initialized = TRUE;
+    }
 }

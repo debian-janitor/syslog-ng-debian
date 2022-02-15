@@ -109,14 +109,12 @@ afstomp_dd_set_destination(LogDriver *d, const gchar *destination)
 }
 
 void
-afstomp_dd_set_body(LogDriver *d, const gchar *body)
+afstomp_dd_set_body(LogDriver *d, LogTemplate *body_template)
 {
   STOMPDestDriver *self = (STOMPDestDriver *) d;
-  GlobalConfig *cfg = log_pipe_get_config((LogPipe *)d);
 
-  if (!self->body_template)
-    self->body_template = log_template_new(cfg, NULL);
-  log_template_compile(self->body_template, body, NULL);
+  log_template_unref(self->body_template);
+  self->body_template = body_template;
 }
 
 void
@@ -266,8 +264,10 @@ afstomp_set_frame_body(STOMPDestDriver *self, GString *body, stomp_frame *frame,
 {
   if (self->body_template)
     {
-      log_template_format(self->body_template, msg, &self->template_options, LTZ_LOCAL,
-                          self->super.worker.instance.seq_num, NULL, body);
+      LogTemplateEvalOptions options = {&self->template_options, LTZ_LOCAL,
+                                        self->super.worker.instance.seq_num, NULL
+                                       };
+      log_template_format(self->body_template, msg, &options, body);
       stomp_frame_set_body(frame, body->str, body->len);
     }
 }
@@ -300,9 +300,8 @@ afstomp_worker_publish(STOMPDestDriver *self, LogMessage *msg)
       stomp_frame_add_header(&frame, "receipt", seq_num);
     };
 
-  value_pairs_foreach(self->vp, afstomp_vp_foreach, msg,
-                      self->super.worker.instance.seq_num, LTZ_SEND,
-                      &self->template_options, &frame);
+  LogTemplateEvalOptions options = {&self->template_options, LTZ_SEND, self->super.worker.instance.seq_num, NULL};
+  value_pairs_foreach(self->vp, afstomp_vp_foreach, msg, &options, &frame);
 
   afstomp_set_frame_body(self, body, &frame, msg);
 
@@ -358,7 +357,7 @@ afstomp_dd_init(LogPipe *s)
               evt_tag_int("port", self->port),
               evt_tag_str("destination", self->destination));
 
-  return log_threaded_dest_driver_start_workers(&self->super);
+  return TRUE;
 }
 
 static void

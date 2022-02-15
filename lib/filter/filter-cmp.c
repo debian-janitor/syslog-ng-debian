@@ -61,7 +61,7 @@ fop_compare(FilterCmp *self, const gchar *left, const gchar *right)
 }
 
 static gboolean
-fop_cmp_eval(FilterExprNode *s, LogMessage **msgs, gint num_msg)
+fop_cmp_eval(FilterExprNode *s, LogMessage **msgs, gint num_msg, LogTemplateEvalOptions *options)
 {
   FilterCmp *self = (FilterCmp *) s;
 
@@ -69,8 +69,8 @@ fop_cmp_eval(FilterExprNode *s, LogMessage **msgs, gint num_msg)
   GString *left_buf = scratch_buffers_alloc_and_mark(&marker);
   GString *right_buf = scratch_buffers_alloc();
 
-  log_template_format_with_context(self->left, msgs, num_msg, NULL, LTZ_LOCAL, 0, NULL, left_buf);
-  log_template_format_with_context(self->right, msgs, num_msg, NULL, LTZ_LOCAL, 0, NULL, right_buf);
+  log_template_format_with_context(self->left, msgs, num_msg, options, left_buf);
+  log_template_format_with_context(self->right, msgs, num_msg, options, right_buf);
 
   gboolean result = FALSE;
 
@@ -106,6 +106,26 @@ fop_cmp_free(FilterExprNode *s)
 
   log_template_unref(self->left);
   log_template_unref(self->right);
+  g_free((gchar *) self->super.type);
+}
+
+FilterExprNode *
+fop_cmp_clone(FilterExprNode *s)
+{
+  FilterCmp *self = (FilterCmp *) s;
+
+  FilterCmp *cloned_self = g_new0(FilterCmp, 1);
+  filter_expr_node_init_instance(&cloned_self->super);
+
+  cloned_self->super.eval = fop_cmp_eval;
+  cloned_self->super.free_fn = fop_cmp_free;
+  cloned_self->super.clone = fop_cmp_clone;
+  cloned_self->left = log_template_ref(self->left);
+  cloned_self->right = log_template_ref(self->right);
+  cloned_self->cmp_op = self->cmp_op;
+  cloned_self->super.type = g_strdup(self->super.type);
+
+  return &cloned_self->super;
 }
 
 static void
@@ -117,42 +137,42 @@ fop_map_grammar_token_to_cmp_op(FilterCmp *self, GlobalConfig *cfg, gint token)
       self->cmp_op = FCMP_NUM;
     case KW_LT:
       self->cmp_op |= FCMP_LT;
-      self->super.type = "<";
+      self->super.type = g_strdup("<");
       break;
 
     case KW_NUM_LE:
       self->cmp_op = FCMP_NUM;
     case KW_LE:
       self->cmp_op |= FCMP_LT | FCMP_EQ;
-      self->super.type = "<=";
+      self->super.type = g_strdup("<=");
       break;
 
     case KW_NUM_EQ:
       self->cmp_op = FCMP_NUM;
     case KW_EQ:
       self->cmp_op |= FCMP_EQ;
-      self->super.type = "==";
+      self->super.type = g_strdup("==");
       break;
 
     case KW_NUM_NE:
       self->cmp_op = FCMP_NUM;
     case KW_NE:
       self->cmp_op |= FCMP_LT | FCMP_GT;
-      self->super.type = "!=";
+      self->super.type = g_strdup("!=");
       break;
 
     case KW_NUM_GE:
       self->cmp_op = FCMP_NUM;
     case KW_GE:
       self->cmp_op |= FCMP_GT | FCMP_EQ;
-      self->super.type = ">=";
+      self->super.type = g_strdup(">=");
       break;
 
     case KW_NUM_GT:
       self->cmp_op = FCMP_NUM;
     case KW_GT:
       self->cmp_op |= FCMP_GT;
-      self->super.type = ">";
+      self->super.type = g_strdup(">");
       break;
 
     default:
@@ -182,6 +202,7 @@ fop_cmp_new(LogTemplate *left, LogTemplate *right, gint token)
 
   self->super.eval = fop_cmp_eval;
   self->super.free_fn = fop_cmp_free;
+  self->super.clone = fop_cmp_clone;
   self->left = left;
   self->right = right;
 

@@ -1,12 +1,15 @@
 SCL_SUBDIRS	= \
 	apache		\
+	cee		\
 	cim		\
 	cisco		\
 	collectd \
 	checkpoint	\
 	default-network-drivers	\
+	discord \
 	elasticsearch	\
 	ewmm		\
+	fortigate	\
 	graphite	\
 	graylog2	\
 	hdfs		\
@@ -22,6 +25,7 @@ SCL_SUBDIRS	= \
 	nodejs		\
 	osquery	\
 	pacct		\
+	paloalto 	\
 	rewrite	\
 	slack \
 	snmptrap	\
@@ -48,7 +52,7 @@ scl-install-data-local:
 		fi; \
 	done
 	$(mkinstalldirs) $(DESTDIR)/$(scldir)
-	(cd $(srcdir)/scl; tar cf - $(SCL_SUBDIRS)) | (cd $(DESTDIR)/$(scldir) && tar xf -)
+	(cd $(srcdir)/scl; tar cf - $(SCL_SUBDIRS)) | (cd $(DESTDIR)/$(scldir) && tar xf - --no-same-owner)
 	chmod -R u+rwX $(DESTDIR)/$(scldir)
 
 scl-uninstall-local:

@@ -79,11 +79,12 @@ _register_external_stats_counter(atomic_gssize *ctr, gssize initial_value)
   return counter;
 }
 
-Test(stats_external_counter, external_ctr_is_read_only_for_stats_set, .signal=SIGABRT)
+Test(stats_external_counter, external_ctr_is_read_only_for_stats_set)
 {
   atomic_gssize test_ctr;
   StatsCounterItem *stats_ctr = _register_external_stats_counter(&test_ctr, 11);
   stats_counter_set(stats_ctr, 1);
+  cr_expect_eq(stats_counter_get(stats_ctr), 11);
 };
 
 Test(stats_external_counter, external_ctr_is_read_only_for_stats_inc, .signal=SIGABRT)
@@ -178,7 +179,7 @@ Test(stats_external_counter, register_same_ctr_as_external_after_internal_unregi
     stats_unregister_counter(&sc_key, SC_TYPE_PROCESSED, &counter);
     // assert, SIGABRT:
     stats_register_external_counter(0, &sc_key, SC_TYPE_PROCESSED, &test_ctr);
-    // this is beacuse we are not unset the live mask even when the use_ctr is 0...
+    // this is because we are not unset the live mask even when the use_ctr is 0...
     // I'm not sure if it is correct, but we have other unit tests, where we expect the same behaviour
     /*  counter = stats_get_counter(&sc_key, SC_TYPE_PROCESSED);
         cr_expect_eq(counter->value_ref, &test_ctr);

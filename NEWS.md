@@ -1,104 +1,133 @@
-3.28.1
+3.35.1
 ======
+
+## syslog-ng OSE APT repository
+
+From now on, Ubuntu and Debian packages will be published with every syslog-ng release in the form of an APT repository.
+
+We, syslog-ng developers, provide these packages and the APT repository "as is" without warranty of any kind,
+on a best-effort level.
+
+Currently, syslog-ng packages are released for the following distribution versions (x86-64):
+  - Debian: bullseye, buster, stretch, sid, testing
+  - Ubuntu: Impish, Focal, Bionic, Xenial
+
+For instructions on how to install syslog-ng on Debian/Ubuntu distributions, see the
+[README](https://github.com/syslog-ng/syslog-ng/blob/master/README.md#debianubuntu).
 
 ## Highlights
 
- * `http`: add support for proxy option
+ * `throttle()`: added a new `filter` that allows rate limiting messages based on arbitrary keys in each message.
+   Note: messages over the rate limit are dropped (just like in any other filter).
 
-   Example:
    ```
-   log {
-      source { system(); };
-      destination { http( url("SYSLOG_SERVER_IP:PORT") proxy("PROXY_IP:PORT") method("POST") ); };
+   filter f_throttle {
+     throttle(
+       template("$HOST")
+       rate(5000)
+     );
    };
    ```
-   ([#3253](https://github.com/syslog-ng/syslog-ng/pull/3253))
+   ([#3781](https://github.com/syslog-ng/syslog-ng/pull/3781))
+
+ * `mqtt()`: added a new `source` that can be used to receive messages using the MQTT protocol.
+   Supported transports: `tcp`, `ws`, `ssl`, `wss`
+
+   Example config:
+   ```
+   source {
+       mqtt{
+           topic("sub1"),
+           address("tcp://localhost:4445")
+       };
+   };
+   ```
+   ([#3809](https://github.com/syslog-ng/syslog-ng/pull/3809))
 
 ## Features
+ * `afsocket`: Socket options, such as ip-ttl() or tcp-keepalive-time(), are
+   traditionally named by their identifier defined in socket(7) and unix(7) man
+   pages.  This was not the case with the pass-unix-credentials() option, which -
+   unlike other similar options - was also possible to set globally.
 
- * `map`: template function
+   A new option called so-passcred() is now introduced, which works similarly
+   how other socket related options do, which also made possible a nice code
+   cleanup in the related code sections.  Of course the old name remains
+   supported in compatibility modes.
 
-   This template function applies a function to all elements of a list. For example: `$(map $(+ 1 $_) 0,1,2)` => 1,2,3.
-   ([#3301](https://github.com/syslog-ng/syslog-ng/pull/3301))
- * `use-syslogng-pid()`: new option to all sources
+   The PR also implements a new source flag `ignore-aux-data`, which causes
+   syslog-ng not to propagate transport-level auxiliary information to log
+   messages.  Auxiliary information includes for example the pid/uid of the
+   sending process in the case of UNIX based transports, OR the X.509
+   certificate information in case of SSL/TLS encrypted data streams.
 
-   If set to `yes`, `syslog-ng` overwrites the message's `${PID}` macro to its own PID.
-   ([#3323](https://github.com/syslog-ng/syslog-ng/pull/3323))
+   By setting flags(ignore-aux-data) one can improve performance at the cost of
+   making this information unavailable in the log messages received through
+   affected sources.
+   ([#3670](https://github.com/syslog-ng/syslog-ng/pull/3670))
+ * `network`: add support for PROXY header before TLS payload
+
+   This new transport method called `proxied-tls-passthrough` is capable of detecting the
+   [PROXY header](http://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) before the TLS payload.
+   Loggen has been updated with the`--proxied-tls-passthrough` option for testing purposes.
+
+   ```
+   source s_proxied_tls_passthrough{
+     network(
+       port(1234)
+       transport("proxied-tls-passthrough"),
+       tls(
+         key-file("/path/to/server_key.pem"),
+         cert-file("/path/to/server_cert.pem"),
+         ca-dir("/path/to/ca/")
+       )
+     );
+   };
+   ```
+   ([#3770](https://github.com/syslog-ng/syslog-ng/pull/3770))
+ * `mqtt() destination`: added `client-id` option. It specifies the unique client ID sent to the broker.
+   ([#3809](https://github.com/syslog-ng/syslog-ng/pull/3809))
 
 ## Bugfixes
 
- * `affile`: eliminate infinite loop in case of a spurious file path
+ * `unset()`, `groupunset()`: fix unwanted removal of values on different log paths
 
-   If the template evaluation of a log message will result to a spurious
-   path in the file destination, syslog-ng refuses to create that file.
-   However the problematic log message was left in the msg queue, so
-   syslog-ng was trying to create that file again in time-reopen periods.
-   From now on syslog-ng will handle "permanent" file errors, and drop
-   the relevant msg.
-   ([#3230](https://github.com/syslog-ng/syslog-ng/pull/3230))
- * Fix minor memory leaks in error scenarios
-   ([#3265](https://github.com/syslog-ng/syslog-ng/pull/3265))
- * `crypto`: fix hang on boot due to lack of entropy
-   ([#3271](https://github.com/syslog-ng/syslog-ng/pull/3271))
- * Fix IPv4 UDP destinations on FreeBSD
+   Due to a copy-on-write bug, `unset()` and `groupunset()` not only removed values
+   from the appropriate log paths, but from all the others where the same message
+   went through. This has been fixed.
+   ([#3803](https://github.com/syslog-ng/syslog-ng/pull/3803))
+ * `regexp-parser()`: fix storing unnamed capture groups under `prefix()`
+   ([#3810](https://github.com/syslog-ng/syslog-ng/pull/3810))
+ * `loggen`: cannot detect plugins on platforms with non .so shared libs (osx)
+   ([#3832](https://github.com/syslog-ng/syslog-ng/pull/3832))
 
-   UDP-based destinations crashed when receiving the first message on FreeBSD due
-   to a bug in destination IP extraction logic.
-   ([#3278](https://github.com/syslog-ng/syslog-ng/pull/3278))
- * `network sources`: fix TLS connection closure
+## Packaging
 
-   RFC 5425 specifies that once the transport receiver gets `close_notify` from the
-   transport sender, it MUST reply with a `close_notify`.
+ * `debian/control`: Added `libcriterion-dev` as a build dependency, where it is available from APT.
+   (`debian-bullseye`, `debian-testing`, `debian-sid`)
+   ([#3794](https://github.com/syslog-ng/syslog-ng/pull/3794))
+ * `centos-7`: `kafka` and `mqtt` modules are now packaged.
 
-   The `close_notify` alert is now sent back correctly in case of TLS network sources.
-   ([#2811](https://github.com/syslog-ng/syslog-ng/pull/2811))
- * `disk-buffer`: fixes possible crash, or fetching wrong value for logmsg nvpair
-   ([#3281](https://github.com/syslog-ng/syslog-ng/pull/3281))
- * `packaging/debian`: fix mod-rdkafka Debian packaging
-   ([#3282](https://github.com/syslog-ng/syslog-ng/pull/3282))
- * `kafka destination`: destination halts if consumer is down, and kafka's queue is filled
-   ([#3305](https://github.com/syslog-ng/syslog-ng/pull/3305))
- * `file-source`: Throw error, when `follow-freq()` is set with a negative float number.
-   ([#3306](https://github.com/syslog-ng/syslog-ng/pull/3306))
- * `stats-freq`: with high stats-freq syslog-ng emits stats immediately causing high memory and CPU usage
-   ([#3320](https://github.com/syslog-ng/syslog-ng/pull/3320))
- * `secure-logging`: bug fixes ([#3284](https://github.com/syslog-ng/syslog-ng/pull/3284))
-    - template arguments are now consistently checked
-    - fixed errors when mac file not provided
-    - fixed abort when derived key not provided
-    - fixed crash with slogkey missing parameters
-    - fixed secure-logging on 32-bit architectures
-    - fixed CMake build
-
-## Other changes
-
- * `dbld`: Fedora 32 support ([#3315](https://github.com/syslog-ng/syslog-ng/pull/3315))
- * `dbld`: Removed Ubuntu Eoan ([#3313](https://github.com/syslog-ng/syslog-ng/pull/3313))
- * `secure-logging`: improvements ([#3284](https://github.com/syslog-ng/syslog-ng/pull/3284))
-    - removed 1500 message length limitation
-    - `slogimport` has been renamed to `slogencrypt`
-    - `$(slog)` will not start anymore when key is not found
-    - internal messaging (warning, debug) improvements
-    - improved memory handling and error information display
-    - CMake build improvements
-    - switched to GLib command line argument parsing
-    - the output of `slogkey -s` is now parsable
-    - manpage improvements
+   The following packages are used as dependencies:
+    * `librdkafka-devel` from EPEL 7
+    * `paho-c-devel` from copr:copr.fedorainfracloud.org:czanik:syslog-ng-githead
+   ([#3797](https://github.com/syslog-ng/syslog-ng/pull/3797))
+ * `debian`: Added bullseye support.
+   ([#3794](https://github.com/syslog-ng/syslog-ng/pull/3794))
+ * `bison`: support build with bison 3.8
+   ([#3784](https://github.com/syslog-ng/syslog-ng/pull/3784))
 
 ## Notes to developers
 
- * `dbld`: devshell is now upgraded to Ubuntu Focal
-   ([#3277](https://github.com/syslog-ng/syslog-ng/pull/3277))
- * `dbld/devshell`: Multiple changes:
-    * Added snmptrapd package.
-    * Added support for both `python2` and `python3`.
-   ([#3222](https://github.com/syslog-ng/syslog-ng/pull/3222))
- * `threaded-source`: fully support default-priority() and default-facility()
-   ([#3304](https://github.com/syslog-ng/syslog-ng/pull/3304))
- * `CMake`: fix libcap detection
-   ([#3294](https://github.com/syslog-ng/syslog-ng/pull/3294))
- * Fix atomic_gssize_set() warning with new glib versions
-   ([#3286](https://github.com/syslog-ng/syslog-ng/pull/3286))
+ * `dbld`: As new distributions use python3 by default it makes sense to explicitly state older platforms which use python2
+   instead of the other way around, so it is not necessary to add that new platform to the python3 case.
+   ([#3780](https://github.com/syslog-ng/syslog-ng/pull/3780))
+ * `dbld`: move dbld image cache from DockerHub to GitHub
+
+   In 2021, GitHub introduced the GitHub Packages service. Among other
+   repositories - it provides a standard Docker registry. DBLD uses
+   this registry, to avoid unnecessary rebuilding of the images.
+   ([#3782](https://github.com/syslog-ng/syslog-ng/pull/3782))
 
 ## Credits
 
@@ -111,6 +140,8 @@ of syslog-ng, contribute.
 
 We would like to thank the following people for their contribution:
 
-Airbus Commercial Aircraft, Andras Mitzki, Antal Nemes, Attila Szakacs,
-Balazs Scheidler, Gabor Nagy, Laszlo Budai, Laszlo Szemere, László Várady,
-Péter Kókai, Vatsal Sisodiya, Vivin Peris.
+Andras Mitzki, Antal Nemes, Attila Szakacs, Balazs Scheidler,
+Balázs Barkó, Benedek Cserhati, Colin Douch, Gabor Nagy, Laszlo Szemere,
+László Várady, Norbert Takacs, Parrag Szilárd, Peter Czanik (CzP),
+Peter Kokai, Robert Paschedag, Ryan Faircloth, Szilárd Parrag,
+Thomas Klausner, Zoltan Pallagi

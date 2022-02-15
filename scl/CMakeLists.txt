@@ -1,12 +1,15 @@
 set(SCL_DIRS
     apache
+    cee
     cim
     checkpoint
     cisco
     collectd
     default-network-drivers
+    discord
     elasticsearch
     ewmm
+    fortigate
     graphite
     graylog2
     hdfs
@@ -22,6 +25,7 @@ set(SCL_DIRS
     nodejs
     osquery
     pacct
+    paloalto
     rewrite
     slack
     snmptrap

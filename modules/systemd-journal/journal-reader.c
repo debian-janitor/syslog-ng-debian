@@ -32,6 +32,7 @@
 #include "parse-number.h"
 #include "journal-reader.h"
 #include "timeutils/misc.h"
+#include "ack-tracker/ack_tracker_factory.h"
 
 #include <stdlib.h>
 #include <iv_event.h>
@@ -264,6 +265,7 @@ _handle_message(JournalReader *self)
   gpointer args[] = {msg, self->options};
 
   journald_foreach_data(self->journal, _handle_data, args);
+
   _set_message_timestamp(self, msg);
   _set_program(self->options, msg);
 
@@ -584,6 +586,63 @@ _add_poll_events(JournalReader *self)
   return TRUE;
 }
 
+#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
+static void
+_journal_process_namespace(gchar *namespace_option, gchar **journal_namespace, gint *journal_flags)
+{
+  if (strcmp(namespace_option, "*") == 0)
+    {
+      *journal_flags |= SD_JOURNAL_ALL_NAMESPACES;
+      if (strlen(namespace_option) > 1)
+        {
+          msg_warning("namespace('*'): discarding everything after the asterisk");
+        }
+    }
+  else if (strncmp(namespace_option, "+", 1) == 0)
+    {
+      *journal_flags |= SD_JOURNAL_INCLUDE_DEFAULT_NAMESPACE;
+      if (strlen(namespace_option) > 1)
+        {
+          *journal_namespace = namespace_option + 1;
+        }
+    }
+  else
+    {
+      if (strlen(namespace_option) > 0)
+        {
+          *journal_namespace = namespace_option;
+        }
+    }
+}
+#endif
+
+static gint
+_journal_open(JournalReader *self)
+{
+  gint journal_flags = SD_JOURNAL_LOCAL_ONLY;
+
+#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
+  gchar *journal_namespace = NULL;
+  _journal_process_namespace(self->options->namespace, &journal_namespace, &journal_flags);
+  return journald_open_namespace(self->journal, journal_namespace, journal_flags);
+#else
+  return journald_open(self->journal, journal_flags);
+#endif
+}
+
+static void
+_init_persist_name(JournalReader *self)
+{
+#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
+  if (strcmp(self->options->namespace, "*") != 0)
+    {
+      self->persist_name = g_strdup_printf("systemd_journal(%s)", self->options->namespace);
+      return;
+    }
+#endif
+  self->persist_name = g_strdup("systemd-journal");
+}
+
 static gboolean
 _init(LogPipe *s)
 {
@@ -595,10 +654,12 @@ _init(LogPipe *s)
       return FALSE;
     }
 
+  _init_persist_name(self);
+
   if (!log_source_init(s))
     return FALSE;
 
-  gint res = journald_open(self->journal, SD_JOURNAL_LOCAL_ONLY);
+  gint res = _journal_open(self);
   if (res < 0)
     {
       msg_error("Error opening the journal",
@@ -652,7 +713,8 @@ journal_reader_set_options(LogPipe *s, LogPipe *control, JournalReaderOptions *o
   JournalReader *self = (JournalReader *) s;
 
   log_source_set_options(&self->super, &options->super, stats_id, stats_instance,
-                         (options->flags & JR_THREADED), TRUE, control->expr_node);
+                         (options->flags & JR_THREADED), control->expr_node);
+  log_source_set_ack_tracker_factory(&self->super, consecutive_ack_tracker_factory_new());
 
   log_pipe_unref(self->control);
   log_pipe_ref(control);
@@ -689,7 +751,7 @@ journal_reader_new(GlobalConfig *cfg, Journald *journal)
   self->super.super.init = _init;
   self->super.super.deinit = _deinit;
   self->super.super.free_fn = _free;
-  self->persist_name = g_strdup("systemd-journal");
+  self->persist_name = NULL;
   self->journal = journal;
   _init_watches(self);
   return self;
@@ -725,7 +787,71 @@ journal_reader_options_init(JournalReaderOptions *options, GlobalConfig *cfg, co
           options->prefix = g_strdup(default_prefix);
         }
     }
+#if SYSLOG_NG_HAVE_JOURNAL_NAMESPACES
+  if (options->namespace == NULL)
+    {
+      const gchar *default_namespace = "*";
+      options->namespace = g_strdup(default_namespace);
+    }
+#else
+  if (options->namespace)
+    {
+      msg_warning("namespace() option on systemd-journal() will have no effect! (systemd < v245)");
+    }
+#endif
   options->initialized = TRUE;
+}
+
+void
+journal_reader_options_set_default_severity(JournalReaderOptions *self, gint severity)
+{
+  if (self->default_pri == 0xFFFF)
+    self->default_pri = LOG_USER;
+  self->default_pri = (self->default_pri & ~7) | severity;
+}
+
+void
+journal_reader_options_set_default_facility(JournalReaderOptions *self, gint facility)
+{
+  if (self->default_pri == 0xFFFF)
+    self->default_pri = LOG_NOTICE;
+  self->default_pri = (self->default_pri & 7) | facility;
+}
+
+void
+journal_reader_options_set_time_zone(JournalReaderOptions *self, gchar *time_zone)
+{
+  if (self->recv_time_zone)
+    g_free(self->recv_time_zone);
+  self->recv_time_zone = g_strdup(time_zone);
+}
+
+void
+journal_reader_options_set_prefix(JournalReaderOptions *self, gchar *prefix)
+{
+  if (self->prefix)
+    g_free(self->prefix);
+  self->prefix = g_strdup(prefix);
+}
+
+void
+journal_reader_options_set_max_field_size(JournalReaderOptions *self, gint max_field_size)
+{
+  self->max_field_size = max_field_size;
+}
+
+void
+journal_reader_options_set_namespace(JournalReaderOptions *self, gchar *namespace)
+{
+  if (self->namespace)
+    g_free(self->namespace);
+  self->namespace = g_strdup(namespace);
+}
+
+void
+journal_reader_options_set_log_fetch_limit(JournalReaderOptions *self, gint log_fetch_limit)
+{
+  self->fetch_limit = log_fetch_limit;
 }
 
 void
@@ -758,6 +884,11 @@ journal_reader_options_destroy(JournalReaderOptions *options)
     {
       time_zone_info_free(options->recv_time_zone_info);
       options->recv_time_zone_info = NULL;
+    }
+  if (options->namespace)
+    {
+      g_free(options->namespace);
+      options->namespace = NULL;
     }
   options->initialized = FALSE;
 }

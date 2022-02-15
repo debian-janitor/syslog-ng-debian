@@ -203,6 +203,12 @@ const gchar *builtin_value_names[] =
   NULL,
 };
 
+static void
+__free_macro_value(void *val)
+{
+  g_string_free((GString *) val, TRUE);
+}
+
 static NVHandle match_handles[256];
 NVRegistry *logmsg_registry;
 const char logmsg_sd_prefix[] = ".SDATA.";
@@ -213,18 +219,12 @@ static StatsCounterItem *count_msg_clones;
 static StatsCounterItem *count_payload_reallocs;
 static StatsCounterItem *count_sdata_updates;
 static StatsCounterItem *count_allocated_bytes;
-static GStaticPrivate priv_macro_value = G_STATIC_PRIVATE_INIT;
+static GPrivate priv_macro_value = G_PRIVATE_INIT(__free_macro_value);
 
 void
 log_msg_write_protect(LogMessage *self)
 {
-  self->protect_cnt++;
-}
-
-void
-log_msg_write_unprotect(LogMessage *self)
-{
-  self->protect_cnt--;
+  self->protected = TRUE;
 }
 
 LogMessage *
@@ -379,23 +379,16 @@ log_msg_is_value_name_valid(const gchar *value)
     return TRUE;
 }
 
-
-static void
-__free_macro_value(void *val)
-{
-  g_string_free((GString *) val, TRUE);
-}
-
 const gchar *
 log_msg_get_macro_value(const LogMessage *self, gint id, gssize *value_len)
 {
   GString *value;
 
-  value = g_static_private_get(&priv_macro_value);
+  value = g_private_get(&priv_macro_value);
   if (!value)
     {
       value = g_string_sized_new(256);
-      g_static_private_set(&priv_macro_value, value, __free_macro_value);
+      g_private_replace(&priv_macro_value, value);
     }
   g_string_truncate(value, 0);
 
@@ -447,7 +440,7 @@ log_msg_init_queue_node(LogMessage *msg, LogMessageQueueNode *node, const LogPat
  * Allocates a new LogMessageQueueNode instance to be enqueued in a
  * LogQueue.
  *
- * NOTE: Assumed to be runnning in the source thread, and that the same
+ * NOTE: Assumed to be running in the source thread, and that the same
  * LogMessage instance is only put into queue from the same thread (e.g.
  * the related fields are _NOT_ locked).
  */
@@ -582,6 +575,14 @@ log_msg_set_value(LogMessage *self, NVHandle handle, const gchar *value, gssize 
 void
 log_msg_unset_value(LogMessage *self, NVHandle handle)
 {
+  g_assert(!log_msg_is_write_protected(self));
+
+  if (!log_msg_chk_flag(self, LF_STATE_OWN_PAYLOAD))
+    {
+      self->payload = nv_table_clone(self->payload, 0);
+      log_msg_set_flag(self, LF_STATE_OWN_PAYLOAD);
+    }
+
   while (!nv_table_unset_value(self->payload, handle))
     {
       /* error allocating string in payload, reallocate */
@@ -1174,7 +1175,10 @@ log_msg_clear(LogMessage *self)
         memset(self->tags, 0, self->num_tags * sizeof(self->tags[0]));
     }
   else
-    self->tags = NULL;
+    {
+      self->tags = NULL;
+      self->num_tags = 0;
+    }
 
   self->num_matches = 0;
   if (!log_msg_chk_flag(self, LF_STATE_OWN_SDATA))
@@ -1191,7 +1195,8 @@ log_msg_clear(LogMessage *self)
     g_sockaddr_unref(self->daddr);
   self->daddr = NULL;
 
-  self->flags |= LF_STATE_OWN_MASK;
+  /* clear "local", "utf8", "internal", "mark" and similar flags, we start afresh */
+  self->flags = LF_STATE_OWN_MASK;
 }
 
 static inline LogMessage *
@@ -1287,7 +1292,7 @@ log_msg_clone_cow(LogMessage *msg, const LogPathOptions *path_options)
   self->ack_and_ref_and_abort_and_suspended = LOGMSG_REFCACHE_REF_TO_VALUE(1) + LOGMSG_REFCACHE_ACK_TO_VALUE(
                                                 0) + LOGMSG_REFCACHE_ABORT_TO_VALUE(0);
   self->cur_node = 0;
-  self->protect_cnt = 0;
+  self->protected = FALSE;
 
   log_msg_add_ack(self, path_options);
   if (!path_options->ack_needed)
@@ -1334,7 +1339,9 @@ log_msg_new(const gchar *msg, gint length,
   LogMessage *self = log_msg_alloc(_determine_payload_size(length, parse_options));
 
   log_msg_init(self);
-  msg_format_parse(parse_options, (guchar *) msg, length, self);
+
+  msg_trace("Initial message parsing follows");
+  msg_format_parse(parse_options, self, (guchar *) msg, length);
   return self;
 }
 
@@ -1883,7 +1890,7 @@ log_msg_global_init(void)
   /* NOTE: we always initialize counters as they are on stats-level(0),
    * however we need to defer that as the stats subsystem may not be
    * operational yet */
-  register_application_hook(AH_RUNNING, (ApplicationHookFunc) log_msg_register_stats, NULL);
+  register_application_hook(AH_RUNNING, (ApplicationHookFunc) log_msg_register_stats, NULL, AHM_RUN_ONCE);
 }
 
 

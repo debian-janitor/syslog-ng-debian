@@ -216,7 +216,8 @@ error:
   if (parse_ctx)
     g_markup_parse_context_free(parse_ctx);
 
-  g_error_free(error);
+  if (error)
+    g_error_free(error);
 
   return success;
 }
@@ -290,7 +291,8 @@ pdbtool_merge(int argc, char *argv[])
     {
       fprintf(stderr, "Error storing patterndb; filename='%s', errror='%s'\n", patterndb_file,
               error ? error->message : "Unknown error");
-      g_error_free(error);
+      if (error)
+        g_error_free(error);
       ok = FALSE;
     }
 
@@ -371,7 +373,7 @@ pdbtool_pdb_emit(LogMessage *msg, gboolean synthetic, gpointer user_data)
         }
       else
         {
-          log_template_format(template, msg, NULL, LTZ_LOCAL, 0, NULL, output);
+          log_template_format(template, msg, &DEFAULT_TEMPLATE_EVAL_OPTIONS, output);
           printf("%s", output->str);
         }
     }
@@ -410,11 +412,17 @@ pdbtool_match(int argc, char *argv[])
 
   if (template_string)
     {
-      gchar *t;
+      GError *error = NULL;
 
-      t = g_strcompress(template_string);
+      gchar *t = g_strcompress(template_string);
       template = log_template_new(configuration, NULL);
-      log_template_compile(template, t, NULL);
+      if (!log_template_compile(template, t, &error))
+        {
+          fprintf(stderr, "Error compiling template: %s, error: %s\n", template->template, error->message);
+          g_clear_error(&error);
+          g_free(t);
+          return 1;
+        }
       g_free(t);
 
     }
@@ -482,7 +490,8 @@ pdbtool_match(int argc, char *argv[])
         }
       transport = log_transport_file_new(fd);
       proto = log_proto_text_server_new(transport, &proto_options);
-      eof = log_proto_server_fetch(proto, &buf, &buflen, &may_read, NULL, NULL) != LPS_SUCCESS;
+      LogProtoStatus status = log_proto_server_fetch(proto, &buf, &buflen, &may_read, NULL, NULL);
+      eof = status != (LPS_SUCCESS && status != LPS_AGAIN);
     }
 
   if (!debug_pattern)
@@ -504,7 +513,7 @@ pdbtool_match(int argc, char *argv[])
         {
           log_msg_unref(msg);
           msg = log_msg_new_empty();
-          parse_options.format_handler->parse(&parse_options, buf, buflen, msg);
+          msg_format_parse(&parse_options, msg, buf, buflen);
         }
 
       if (G_UNLIKELY(debug_pattern))
@@ -599,7 +608,8 @@ pdbtool_match(int argc, char *argv[])
       if (G_LIKELY(proto))
         {
           buf = NULL;
-          eof = log_proto_server_fetch(proto, &buf, &buflen, &may_read, NULL, NULL) != LPS_SUCCESS;
+          LogProtoStatus status = log_proto_server_fetch(proto, &buf, &buflen, &may_read, NULL, NULL);
+          eof = (status != LPS_SUCCESS && status != LPS_AGAIN);
         }
       else
         {
@@ -638,11 +648,11 @@ static GOptionEntry match_options[] =
   },
   {
     "debug-pattern", 'D', 0, G_OPTION_ARG_NONE, &debug_pattern,
-    "Print debuging information on pattern matching", NULL
+    "Print debugging information on pattern matching", NULL
   },
   {
     "debug-csv", 'C', 0, G_OPTION_ARG_NONE, &debug_pattern_parse,
-    "Output debuging information in parseable format", NULL
+    "Output debugging information in parseable format", NULL
   },
   {
     "color-out", 'c', 0, G_OPTION_ARG_NONE, &color_out,
@@ -856,7 +866,7 @@ static GOptionEntry test_options[] =
   },
   {
     "debug", 'D', 0, G_OPTION_ARG_NONE, &debug_pattern,
-    "Print debuging information on non-matching patterns", NULL
+    "Print debugging information on non-matching patterns", NULL
   },
   {
     "color-out", 'c', 0, G_OPTION_ARG_NONE, &color_out,
@@ -872,11 +882,15 @@ pdbtool_walk_tree(RNode *root, gint level, gboolean program)
 {
   gint i;
 
+  printf("[%d]\t", level);
   for (i = 0; i < level; i++)
-    printf(" ");
+    printf("  ");
 
   if (root->parser)
-    printf("@%s:%s@ ", r_parser_type_name(root->parser->type), log_msg_get_value_name(root->parser->handle, NULL));
+    printf("@%s:%s@ [%s]",
+           r_parser_type_name(root->parser->type),
+           log_msg_get_value_name(root->parser->handle, NULL),
+           root->pdb_location ? : "");
   printf("'%s' ", root->key ? (gchar *) root->key : "");
 
   if (root->value)

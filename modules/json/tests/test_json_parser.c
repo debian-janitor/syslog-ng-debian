@@ -147,6 +147,36 @@ Test(json_parser, test_json_parser_validate_type_representation)
   log_pipe_unref(&json_parser->super);
 }
 
+Test(json_parser, test_json_parser_int64_max)
+{
+  LogParser *json_parser = json_parser_new(NULL);
+  json_parser_set_prefix(json_parser, ".prefix.");
+  LogMessage *msg = parse_json_into_log_message("{'int': 9223372036854775807}", json_parser);
+  assert_log_message_value(msg, log_msg_get_value_handle(".prefix.int"), "9223372036854775807");
+  log_msg_unref(msg);
+  log_pipe_unref(&json_parser->super);
+}
+
+Test(json_parser, test_json_parser_int64_min)
+{
+  LogParser *json_parser = json_parser_new(NULL);
+  json_parser_set_prefix(json_parser, ".prefix.");
+  LogMessage *msg = parse_json_into_log_message("{'int': -9223372036854775807}", json_parser);
+  assert_log_message_value(msg, log_msg_get_value_handle(".prefix.int"), "-9223372036854775807");
+  log_msg_unref(msg);
+  log_pipe_unref(&json_parser->super);
+}
+
+Test(json_parser, test_json_parser_int64_mid)
+{
+  LogParser *json_parser = json_parser_new(NULL);
+  json_parser_set_prefix(json_parser, ".prefix.");
+  LogMessage *msg = parse_json_into_log_message("{'int': 1595441285858}", json_parser);
+  assert_log_message_value(msg, log_msg_get_value_handle(".prefix.int"), "1595441285858");
+  log_msg_unref(msg);
+  log_pipe_unref(&json_parser->super);
+}
+
 Test(json_parser, test_json_parser_fails_for_non_object_top_element)
 {
   LogParser *json_parser = json_parser_new(NULL);
@@ -173,7 +203,7 @@ Test(json_parser, test_json_parser_works_with_templates)
   LogTemplate *template;
 
   template = log_template_new(NULL, NULL);
-  log_template_compile(template, "{'foo':'bar'}", NULL);
+  log_template_compile_literal_string(template, "{'foo':'bar'}");
 
   LogParser *json_parser = json_parser_new(NULL);
   log_parser_set_template(json_parser, template);

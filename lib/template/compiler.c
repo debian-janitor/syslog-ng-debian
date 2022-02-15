@@ -75,7 +75,7 @@ parse_msg_ref(LogTemplateCompiler *self)
       self->cursor++;
       if ((*self->cursor) >= '0' && (*self->cursor) <= '9')
         {
-          /* syntax: ${name}@1 to denote the log message index in the correllation state */
+          /* syntax: ${name}@1 to denote the log message index in the correlation state */
           while ((*self->cursor) >= '0' && (*self->cursor) <= '9')
             {
               self->msg_ref += self->msg_ref * 10 + ((*self->cursor) - '0');
@@ -416,7 +416,7 @@ log_template_compiler_compile(LogTemplateCompiler *self, GList **compiled_templa
       if (!log_template_compiler_process_token(self, error))
         {
           log_template_compiler_free_result(self);
-          g_string_sprintf(self->text, "error in template: %s", self->template->template);
+          g_string_printf(self->text, "error in template: %s", self->template->template);
           log_template_add_macro_elem(self, M_NONE, NULL);
           goto error;
         }

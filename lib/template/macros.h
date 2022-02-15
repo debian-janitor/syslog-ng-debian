@@ -27,6 +27,7 @@
 
 #include "syslog-ng.h"
 #include "common-template-typedefs.h"
+#include "eval.h"
 
 /* macro IDs */
 enum
@@ -103,7 +104,7 @@ enum
 
 /* macros (not NV pairs!) that syslog-ng knows about. This was the
  * earliest mechanism for inserting message-specific information into
- * texts. It is now superseeded by name-value pairs where the value is
+ * texts. It is now superseded by name-value pairs where the value is
  * text, but remains to be used for time and other metadata.
  */
 typedef struct _LogMacroDef
@@ -116,8 +117,8 @@ extern LogMacroDef macros[];
 
 /* low level macro functions */
 guint log_macro_lookup(const gchar *macro, gint len);
-gboolean log_macro_expand(GString *result, gint id, gboolean escape, const LogTemplateOptions *opts, gint tz,
-                          gint32 seq_num, const gchar *context_id, const LogMessage *msg);
+gboolean log_macro_expand(GString *result, gint id, gboolean escape, LogTemplateEvalOptions *options,
+                          const LogMessage *msg);
 gboolean log_macro_expand_simple(GString *result, gint id, const LogMessage *msg);
 
 void log_macros_global_init(void);
