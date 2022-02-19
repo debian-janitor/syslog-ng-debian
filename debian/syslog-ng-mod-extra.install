@@ -13,3 +13,7 @@ scl/junos/plugin.conf usr/share/syslog-ng/include/scl/junos/
 scl/netskope/plugin.conf usr/share/syslog-ng/include/scl/netskope/
 scl/websense/plugin.conf usr/share/syslog-ng/include/scl/websense/
 scl/sumologic/sumologic.conf usr/share/syslog-ng/include/scl/sumologic/
+scl/cee/adapter.conf usr/share/syslog-ng/include/scl/cee/
+scl/discord/discord.conf usr/share/syslog-ng/include/scl/discord/
+scl/fortigate/fortigate.conf usr/share/syslog-ng/include/scl/fortigate/
+scl/paloalto/panos.conf usr/share/syslog-ng/include/scl/paloalto/
