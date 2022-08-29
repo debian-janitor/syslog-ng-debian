@@ -125,10 +125,10 @@ Multi-Arch: foreign
 Depends: ${shlibs:Depends}, ${misc:Depends}, util-linux (>= 2.12-10), lsb-base (>= 3.0-6)
 Recommends: logrotate
 Suggests: ${sng:CoreModules}, ${sng:Modules}
-Provides: system-log-daemon, linux-kernel-log-daemon, libsyslog-ng-dev, syslog-ng-mod-journal, syslog-ng-mod-pacctformat [linux-any], syslog-ng-mod-tag-parser
+Provides: system-log-daemon, linux-kernel-log-daemon, syslog-ng-mod-json, syslog-ng-mod-journal, syslog-ng-mod-pacctformat [linux-any], syslog-ng-mod-tag-parser
 Conflicts: system-log-daemon, linux-kernel-log-daemon
-Replaces: syslog-ng (<< 3.3.0~), libsyslog-ng-dev, syslog-ng-mod-json (<< 3.19.1~), syslog-ng-mod-journal (<< 3.25.1~), syslog-ng-mod-pacctformat (<< 3.26.1~), syslog-ng-mod-tag-parser (<< 3.26.1~)
-Breaks: syslog-ng (<< 3.3.0~), libsyslog-ng-dev, syslog-ng-mod-json (<< 3.19.1~), syslog-ng-mod-journal (<< 3.25.1~), syslog-ng-mod-pacctformat (<< 3.26.1~), syslog-ng-mod-tag-parser (<< 3.26.1~)
+Replaces: syslog-ng-mod-json (<< 3.19.1~), syslog-ng-mod-journal (<< 3.25.1~), syslog-ng-mod-pacctformat (<< 3.26.1~), syslog-ng-mod-tag-parser (<< 3.26.1~)
+Breaks: syslog-ng-mod-json (<< 3.19.1~), syslog-ng-mod-journal (<< 3.25.1~), syslog-ng-mod-pacctformat (<< 3.26.1~), syslog-ng-mod-tag-parser (<< 3.26.1~)
 Description: Enhanced system logging daemon (core)
  syslog-ng is an enhanced log daemon, supporting a wide range of input
  and output methods: syslog, unstructured text, message queues,
