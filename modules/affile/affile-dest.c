@@ -140,7 +140,8 @@ affile_dw_reopen(AFFileDestWriter *self)
 
   msg_verbose("Initializing destination file writer",
               evt_tag_str("template", self->owner->filename_template->template),
-              evt_tag_str("filename", self->filename));
+              evt_tag_str("filename", self->filename),
+              evt_tag_str("symlink_as", self->owner->symlink_as));
 
   self->last_open_stamp = self->last_msg_stamp;
   if (self->owner->overwrite_if_older > 0 &&
@@ -156,6 +157,9 @@ affile_dw_reopen(AFFileDestWriter *self)
   FileOpenerResult open_result = file_opener_open_fd(self->owner->file_opener, self->filename, AFFILE_DIR_WRITE, &fd);
   if (open_result == FILE_OPENER_RESULT_SUCCESS)
     {
+      if (self->owner->symlink_as != NULL)
+        file_opener_symlink(self->owner->file_opener, self->owner->symlink_as, self->filename);
+
       LogTransport *transport = file_opener_construct_transport(self->owner->file_opener, fd);
 
       proto = file_opener_construct_dst_proto(self->owner->file_opener, transport,
@@ -383,6 +387,15 @@ affile_dd_set_overwrite_if_older(LogDriver *s, gint overwrite_if_older)
   AFFileDestDriver *self = (AFFileDestDriver *) s;
 
   self->overwrite_if_older = overwrite_if_older;
+}
+
+void
+affile_dd_set_symlink_as(LogDriver *s, const gchar *symlink_as)
+{
+  AFFileDestDriver *self = (AFFileDestDriver *) s;
+
+  g_free(self->symlink_as);
+  self->symlink_as = g_strdup(symlink_as);
 }
 
 void
@@ -707,7 +720,7 @@ affile_dd_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options)
       GString *filename;
 
       filename = g_string_sized_new(32);
-      LogTemplateEvalOptions options = {&self->writer_options.template_options, LTZ_LOCAL, 0, NULL};
+      LogTemplateEvalOptions options = {&self->writer_options.template_options, LTZ_LOCAL, 0, NULL, LM_VT_STRING};
       log_template_format(self->filename_template, msg, &options, filename);
 
       g_mutex_lock(&self->lock);
@@ -756,6 +769,7 @@ affile_dd_free(LogPipe *s)
   log_writer_options_destroy(&self->writer_options);
   file_opener_options_deinit(&self->file_opener_options);
   file_opener_free(self->file_opener);
+  g_free(self->symlink_as);
   log_dest_driver_free(s);
 }
 

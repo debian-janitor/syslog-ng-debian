@@ -57,7 +57,8 @@ log_db_parser_emit(LogMessage *msg, gboolean synthetic, gpointer user_data)
     {
       stateful_parser_emit_synthetic(&self->super, msg);
       msg_debug("db-parser: emitting synthetic message",
-                evt_tag_str("msg", log_msg_get_value(msg, LM_V_MESSAGE, NULL)));
+                evt_tag_str("msg", log_msg_get_value(msg, LM_V_MESSAGE, NULL)),
+                log_pipe_location_tag(&self->super.super.super));
     }
 }
 
@@ -70,7 +71,9 @@ log_db_parser_reload_database(LogDBParser *self)
   if (stat(self->db_file, &st) < 0)
     {
       msg_error("Error stating pattern database file, no automatic reload will be performed",
-                evt_tag_str("error", g_strerror(errno)));
+                evt_tag_str("file", self->db_file),
+                evt_tag_str("error", g_strerror(errno)),
+                log_pipe_location_tag(&self->super.super.super));
       return;
     }
   if ((self->db_file_inode == st.st_ino && self->db_file_mtime == st.st_mtime))
@@ -83,7 +86,9 @@ log_db_parser_reload_database(LogDBParser *self)
 
   if (!pattern_db_reload_ruleset(self->db, cfg, self->db_file))
     {
-      msg_error("Error reloading pattern database, no automatic reload will be performed");
+      msg_error("Error reloading pattern database, no automatic reload will be performed",
+                evt_tag_str("file", self->db_file),
+                log_pipe_location_tag(&self->super.super.super));
     }
   else
     {
@@ -91,7 +96,8 @@ log_db_parser_reload_database(LogDBParser *self)
       msg_notice("Log pattern database reloaded",
                  evt_tag_str("file", self->db_file),
                  evt_tag_str("version", pattern_db_get_ruleset_version(self->db)),
-                 evt_tag_str("pub_date", pattern_db_get_ruleset_pub_date(self->db)));
+                 evt_tag_str("pub_date", pattern_db_get_ruleset_pub_date(self->db)),
+                 log_pipe_location_tag(&self->super.super.super));
     }
 
 }
@@ -131,7 +137,9 @@ log_db_parser_init(LogPipe *s)
       if (stat(self->db_file, &st) < 0)
         {
           msg_error("Error stating pattern database file, no automatic reload will be performed",
-                    evt_tag_str("error", g_strerror(errno)));
+                    evt_tag_str("file", self->db_file),
+                    evt_tag_str("error", g_strerror(errno)),
+                    log_pipe_location_tag(&self->super.super.super));
         }
       else if (self->db_file_inode != st.st_ino || self->db_file_mtime != st.st_mtime)
         {
@@ -214,8 +222,8 @@ log_db_parser_process(LogParser *s, LogMessage **pmsg, const LogPathOptions *pat
     {
       log_msg_make_writable(pmsg, path_options);
       msg_trace("db-parser message processing started",
-                evt_tag_str ("input", input),
-                evt_tag_printf("msg", "%p", *pmsg));
+                evt_tag_str("input", input),
+                evt_tag_msg_reference(*pmsg));
       if (G_UNLIKELY(self->super.super.template))
         matched = pattern_db_process_with_custom_message(self->db, *pmsg, input, input_len);
       else
@@ -230,6 +238,8 @@ log_db_parser_process(LogParser *s, LogMessage **pmsg, const LogPathOptions *pat
     }
   if (!self->drop_unmatched)
     matched = TRUE;
+  if (self->super.inject_mode == LDBP_IM_AGGREGATE_ONLY)
+    matched = FALSE;
   return matched;
 }
 
@@ -258,6 +268,9 @@ log_db_parser_clone(LogPipe *s)
 
   cloned = (LogDBParser *) log_db_parser_new(s->cfg);
   log_db_parser_set_db_file(cloned, self->db_file);
+  log_db_parser_set_drop_unmatched(cloned, self->drop_unmatched);
+  log_db_parser_set_program_template_ref(&cloned->super.super, log_template_ref(self->program_template));
+  log_parser_set_template(&cloned->super.super, log_template_ref(self->super.super.template));
   return &cloned->super.super.super;
 }
 

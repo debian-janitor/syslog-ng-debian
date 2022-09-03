@@ -46,6 +46,7 @@
 #include "scratch-buffers.h"
 #include "timeutils/cache.h"
 #include "mainloop.h"
+#include "msg-format.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -335,7 +336,9 @@ static gboolean debug_pattern = FALSE;
 static gboolean debug_pattern_parse = FALSE;
 
 gboolean
-pdbtool_match_values(NVHandle handle, const gchar *name, const gchar *value, gssize length, gpointer user_data)
+pdbtool_match_values(NVHandle handle, const gchar *name,
+                     const gchar *value, gssize length,
+                     LogMessageValueType type, gpointer user_data)
 {
   gint *ret = user_data;
 
@@ -367,7 +370,7 @@ pdbtool_pdb_emit(LogMessage *msg, gboolean synthetic, gpointer user_data)
 
           nv_table_foreach(msg->payload, logmsg_registry, pdbtool_match_values, ret);
           g_string_truncate(output, 0);
-          log_msg_print_tags(msg, output);
+          log_msg_format_tags(msg, output);
           printf("TAGS=%s\n", output->str);
           printf("\n");
         }
@@ -512,8 +515,7 @@ pdbtool_match(int argc, char *argv[])
       if (G_LIKELY(proto))
         {
           log_msg_unref(msg);
-          msg = log_msg_new_empty();
-          msg_format_parse(&parse_options, msg, buf, buflen);
+          msg = msg_format_parse(&parse_options, buf, buflen);
         }
 
       if (G_UNLIKELY(debug_pattern))
@@ -539,7 +541,7 @@ pdbtool_match(int argc, char *argv[])
 
                       printf("%s@%s:%s=%.*s@%s",
                              colors[COLOR_PARSER],
-                             r_parser_type_name(dbg_info->pnode->type),
+                             r_parser_type_name(dbg_info->pnode->parser_type),
                              name_len ? name : "",
                              name_len ? dbg_info->match_len : 0,
                              name_len ? msg_string + dbg_info->match_off : "",
@@ -579,7 +581,7 @@ pdbtool_match(int argc, char *argv[])
 
                   printf("PDBTOOL_DEBUG=%d:%d:%d:%d:%d:%s:%s\n",
                          i, dbg_info->i, dbg_info->node->keylen, dbg_info->match_off, dbg_info->match_len,
-                         dbg_info->pnode ? r_parser_type_name(dbg_info->pnode->type) : "",
+                         dbg_info->pnode ? r_parser_type_name(dbg_info->pnode->parser_type) : "",
                          dbg_info->pnode && name_len ? name : ""
                         );
                 }
@@ -888,7 +890,7 @@ pdbtool_walk_tree(RNode *root, gint level, gboolean program)
 
   if (root->parser)
     printf("@%s:%s@ [%s]",
-           r_parser_type_name(root->parser->type),
+           r_parser_type_name(root->parser->parser_type),
            log_msg_get_value_name(root->parser->handle, NULL),
            root->pdb_location ? : "");
   printf("'%s' ", root->key ? (gchar *) root->key : "");
@@ -1280,9 +1282,9 @@ main(int argc, char *argv[])
   ret = modes[mode].main(argc, argv);
   scratch_buffers_allocator_deinit();
   scratch_buffers_global_deinit();
-  stats_destroy();
   log_tags_global_deinit();
   log_msg_global_deinit();
+  stats_destroy();
 
   cfg_free(configuration);
   configuration = NULL;

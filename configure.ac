@@ -55,7 +55,7 @@ LRC_MIN_VERSION="1.6.0"
 JOURNALD_MIN_VERSION="195"
 LIBSYSTEMD_MIN_VERSION="209"
 LIBSYSTEMD_WITH_JOURNAL_NAMESPACES_MIN_VERSION="245"
-JAVA_MIN_VERSION="1.7"
+JAVA_MIN_VERSION="1.8"
 GRADLE_MIN_VERSION="3.4"
 HIREDIS_MIN_VERSION="0.11.0"
 CRITERION_MIN_VERSION="2.2.1"
@@ -256,9 +256,9 @@ AC_ARG_ENABLE(mongodb,
               ,,enable_mongodb="auto")
 
 AC_ARG_WITH(jsonc,
-              [  --with-jsonc=[system/internal/auto/no]
-                                         Link against the system supplied or the built-in jsonc library or explicitly disable it. (default:auto)]
-              ,,with_jsonc="internal")
+              [  --with-jsonc=[yes/no]
+                                         Link against the system supplied jsonc library or explicitly disable it. (default: yes)]
+              ,,with_jsonc="yes")
 
 AC_ARG_ENABLE(json,
              [ --enable-json=[yes/no]            Enable JSON support (default: yes)]
@@ -784,6 +784,7 @@ fi
 
 dnl ***************************************************************************
 dnl Checks for libraries
+AC_CHECK_LIB(m, round, BASE_LIBS="$BASE_LIBS -lm")
 AC_CHECK_LIB(door, door_create, BASE_LIBS="$BASE_LIBS -ldoor")
 AC_CHECK_LIB(socket, socket, BASE_LIBS="$BASE_LIBS -lsocket")
 AC_CHECK_LIB(rt, nanosleep, BASE_LIBS="$BASE_LIBS -lrt")
@@ -1047,6 +1048,7 @@ CPPFLAGS_SAVE="$CPPFLAGS"
 CPPFLAGS="$CPPFLAGS $OPENSSL_CFLAGS"
 
 AC_CHECK_DECLS([SSL_CTX_get0_param],[], [], [[#include <openssl/ssl.h>]])
+AC_CHECK_DECLS([SSL_CTX_set_ciphersuites],[], [], [[#include <openssl/ssl.h>]])
 AC_CHECK_DECLS([X509_STORE_CTX_get0_cert],[], [], [[#include <openssl/ssl.h>]])
 AC_CHECK_DECLS([X509_get_extension_flags], [], [], [[#include <openssl/x509v3.h>]])
 AC_CHECK_DECLS([EVP_MD_CTX_reset], [], [], [[#include <openssl/evp.h>]])
@@ -1054,6 +1056,8 @@ AC_CHECK_DECLS([ASN1_STRING_get0_data], [], [], [[#include <openssl/asn1.h>]])
 AC_CHECK_DECLS([DH_set0_pqg], [], [], [[#include <openssl/dh.h>]])
 AC_CHECK_DECLS([BN_get_rfc3526_prime_2048], [], [], [[#include <openssl/bn.h>]])
 AC_CHECK_DECLS([SSL_CTX_set_num_tickets],[], [], [[#include <openssl/ssl.h>]])
+AC_CHECK_DECLS([SSL_CTX_set1_sigalgs_list],[], [], [[#include <openssl/ssl.h>]])
+AC_CHECK_DECLS([SSL_CTX_set1_client_sigalgs_list],[], [], [[#include <openssl/ssl.h>]])
 
 CPPFLAGS="$CPPFLAGS_SAVE"
 
@@ -1218,36 +1222,22 @@ dnl ***************************************************************************
 
 enable_json="no"
 
-JSON_INTERNAL_SOURCE_EXISTS="test -f $srcdir/lib/jsonc/json.h"
-
-if $JSON_INTERNAL_SOURCE_EXISTS; then
-  AC_CONFIG_SUBDIRS([lib/jsonc])
-  JSON_SUBDIRS="lib/jsonc"
+if test "x$with_jsonc" = "xinternal"; then
+   AC_MSG_ERROR([The internal (bundled) json-c library is no longer supported!])
 fi
 
-if test "x$with_jsonc" = "xsystem" -o "x$with_jsonc" = "xauto"; then
+if test "x$with_jsonc" = "xsystem"; then
+   with_jsonc="yes"
+fi
+
+if test "x$with_jsonc" = "xyes" -o "x$with_jsonc" = "xauto"; then
    enable_json="yes"
    PKG_CHECK_EXISTS(json-c, json_module_name="json-c",
    PKG_CHECK_EXISTS(json, json_module_name="json"))
-   PKG_CHECK_MODULES(JSON, $json_module_name >= $JSON_C_MIN_VERSION,[with_jsonc="system"], [JSON_LIBS=""; enable_json="no"])
-   if test "x$with_jsonc" = "xsystem" -a "x$enable_json" = "xno"; then
+   PKG_CHECK_MODULES(JSON, $json_module_name >= $JSON_C_MIN_VERSION,[with_jsonc="yes"], [JSON_LIBS=""; enable_json="no"])
+   if test "x$with_jsonc" = "xyes" -a "x$enable_json" = "xno"; then
      AC_MSG_ERROR([json-c library development files cannot be not found on system!])
    fi
-fi
-if test "x$with_jsonc" = "xinternal" -o "x$with_jsonc" = "xauto"; then
-  AC_MSG_CHECKING(for JSON)
-  if $JSON_INTERNAL_SOURCE_EXISTS; then
-      JSON_LIBS="\$(top_builddir)/lib/jsonc/libjson-c.la"
-      JSON_DEPENDENCY="$JSON_LIBS"
-      JSON_CFLAGS="-I\$(top_srcdir)/lib/jsonc -I\$(top_builddir)/lib/jsonc"
-      enable_json="yes"
-      with_jsonc="internal"
-  else
-      AC_MSG_WARN([Internal jsonc sources not found in lib/jsonc])
-      enable_json="no"
-      with_jsonc="no"
-  fi
-  AC_MSG_RESULT($enable_json)
 fi
 
 dnl ***************************************************************************
@@ -1382,7 +1372,7 @@ if test "x$enable_http" != "xno" && test "x$with_libcurl" != "xno"; then
         if test "$enable_http" = "yes"; then
            old_CFLAGS=$CFLAGS
            CFLAGS=$LIBCURL_CFLAGS
-           AC_CHECK_DECLS([CURL_SSLVERSION_TLSv1_0, CURL_SSLVERSION_TLSv1_1, CURL_SSLVERSION_TLSv1_2, CURL_SSLVERSION_TLSv1_3],
+           AC_CHECK_DECLS([CURL_SSLVERSION_TLSv1_0, CURL_SSLVERSION_TLSv1_1, CURL_SSLVERSION_TLSv1_2, CURL_SSLVERSION_TLSv1_3, CURLOPT_TLS13_CIPHERS],
                           [], [],
                           [[#include <curl/curl.h>]])
            CFLAGS=$old_CFLAGS
@@ -1990,7 +1980,6 @@ AM_CONDITIONAL(ENABLE_GEOIP2, [test "$enable_geoip2" = "yes"])
 AM_CONDITIONAL(ENABLE_REDIS, [test "$enable_redis" = "yes"])
 AM_CONDITIONAL(ENABLE_KAFKA, [test "$enable_kafka" = "yes"])
 AM_CONDITIONAL(IVYKIS_INTERNAL, [test "x$with_ivykis" = "xinternal"])
-AM_CONDITIONAL(JSON_INTERNAL, [test "x$with_jsonc" = "xinternal"])
 AM_CONDITIONAL(LIBMONGO_INTERNAL, [test "x$LIBMONGO_SUBDIRS" != "x"])
 AM_CONDITIONAL(LIBRABBITMQ_INTERNAL, [test "x$with_librabbitmq_client" = "xinternal"])
 AM_CONDITIONAL(ENABLE_RIEMANN, [test "$enable_riemann" != "no"])
@@ -2057,7 +2046,6 @@ AC_SUBST(LIBRABBITMQ_CFLAGS)
 AC_SUBST(LIBRABBITMQ_SUBDIRS)
 AC_SUBST(JSON_LIBS)
 AC_SUBST(JSON_CFLAGS)
-AC_SUBST(JSON_SUBDIRS)
 AC_SUBST(JSON_DEPENDENCY)
 AC_SUBST(IVYKIS_SUBDIRS)
 AC_SUBST(RESOLV_LIBS)
@@ -2102,7 +2090,6 @@ echo "  Criterion                   : ${with_criterion:=no}"
 echo "  Unit tests                  : ${enable_tests:=no}"
 echo " Submodules:"
 echo "  ivykis                      : $with_ivykis"
-echo "  jsonc                       : $with_jsonc"
 echo " Features:"
 echo "  Forced server mode          : ${enable_forced_server_mode:=yes}"
 echo "  Debug symbols               : ${enable_debug:=no}"
@@ -2115,6 +2102,7 @@ echo "  Linux capability support    : ${has_linux_caps:=no}"
 echo "  Env wrapper support         : ${enable_env_wrapper:=no}"
 echo "  systemd support             : ${enable_systemd:=no} (unit dir: ${systemdsystemunitdir:=none})"
 echo "  systemd-journal support     : ${with_systemd_journal:=no}"
+echo "  JSON support                : $with_jsonc"
 echo " Build options:"
 echo "  Generate manual pages       : ${enable_manpages:=no}"
 echo "  Install manual pages        : ${enable_manpages_install:=no}"

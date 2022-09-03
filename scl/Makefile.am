@@ -16,10 +16,12 @@ SCL_SUBDIRS	= \
 	iptables	\
 	junos		\
 	kafka		\
+	kubernetes	\
 	linux-audit	\
 	loadbalancer	\
 	loggly		\
 	logmatic	\
+	mariadb		\
 	mbox		\
 	netskope	\
 	nodejs		\

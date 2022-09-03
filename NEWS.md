@@ -1,133 +1,114 @@
-3.35.1
+3.38.1
 ======
-
-## syslog-ng OSE APT repository
-
-From now on, Ubuntu and Debian packages will be published with every syslog-ng release in the form of an APT repository.
-
-We, syslog-ng developers, provide these packages and the APT repository "as is" without warranty of any kind,
-on a best-effort level.
-
-Currently, syslog-ng packages are released for the following distribution versions (x86-64):
-  - Debian: bullseye, buster, stretch, sid, testing
-  - Ubuntu: Impish, Focal, Bionic, Xenial
-
-For instructions on how to install syslog-ng on Debian/Ubuntu distributions, see the
-[README](https://github.com/syslog-ng/syslog-ng/blob/master/README.md#debianubuntu).
 
 ## Highlights
 
- * `throttle()`: added a new `filter` that allows rate limiting messages based on arbitrary keys in each message.
-   Note: messages over the rate limit are dropped (just like in any other filter).
+### Sneak peek into syslog-ng v4.0
 
-   ```
-   filter f_throttle {
-     throttle(
-       template("$HOST")
-       rate(5000)
-     );
-   };
-   ```
-   ([#3781](https://github.com/syslog-ng/syslog-ng/pull/3781))
+syslog-ng v4.0 is right around the corner.
 
- * `mqtt()`: added a new `source` that can be used to receive messages using the MQTT protocol.
-   Supported transports: `tcp`, `ws`, `ssl`, `wss`
+This release (v3.38.1) contains all major changes, however, they are
+currently all hidden behind a feature flag.
+To enable and try those features, you need to specify `@version: 4.0` at the
+top of the configuration file.
 
-   Example config:
-   ```
-   source {
-       mqtt{
-           topic("sub1"),
-           address("tcp://localhost:4445")
-       };
-   };
-   ```
-   ([#3809](https://github.com/syslog-ng/syslog-ng/pull/3809))
+You can find out more about the 4.0 changes and features
+[here](https://github.com/syslog-ng/syslog-ng/blob/master/NEWS-4.0.md).
+
+Read our practical introduction to typing at
+[syslog-ng-future.blog](https://syslog-ng-future.blog/syslog-ng-4-progress-3-38-1-release/).
 
 ## Features
- * `afsocket`: Socket options, such as ip-ttl() or tcp-keepalive-time(), are
-   traditionally named by their identifier defined in socket(7) and unix(7) man
-   pages.  This was not the case with the pass-unix-credentials() option, which -
-   unlike other similar options - was also possible to set globally.
 
-   A new option called so-passcred() is now introduced, which works similarly
-   how other socket related options do, which also made possible a nice code
-   cleanup in the related code sections.  Of course the old name remains
-   supported in compatibility modes.
+  * `grouping-by()`: added `inject-mode(aggregate-only)`
 
-   The PR also implements a new source flag `ignore-aux-data`, which causes
-   syslog-ng not to propagate transport-level auxiliary information to log
-   messages.  Auxiliary information includes for example the pid/uid of the
-   sending process in the case of UNIX based transports, OR the X.509
-   certificate information in case of SSL/TLS encrypted data streams.
+    This inject mode will drop individual messages that make up the correlation
+    context (`key()` groups) and would only yield the aggregate messages
+    (e.g. the results of the correlation).
+    ([#3998](https://github.com/syslog-ng/syslog-ng/pull/3998))
+  * `add-contextual-data()`: add support for type propagation, e.g. set the
+    type of name-value pairs as they are created/updated to the value returned
+    by the template expression that we use to set the value.
 
-   By setting flags(ignore-aux-data) one can improve performance at the cost of
-   making this information unavailable in the log messages received through
-   affected sources.
-   ([#3670](https://github.com/syslog-ng/syslog-ng/pull/3670))
- * `network`: add support for PROXY header before TLS payload
+    The 3rd column in the CSV file (e.g. the template expression) now supports
+    specifying a type-hint, in the format of "type-hint(template-expr)".
 
-   This new transport method called `proxied-tls-passthrough` is capable of detecting the
-   [PROXY header](http://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) before the TLS payload.
-   Loggen has been updated with the`--proxied-tls-passthrough` option for testing purposes.
+    Example line in the CSV database:
 
-   ```
-   source s_proxied_tls_passthrough{
-     network(
-       port(1234)
-       transport("proxied-tls-passthrough"),
-       tls(
-         key-file("/path/to/server_key.pem"),
-         cert-file("/path/to/server_cert.pem"),
-         ca-dir("/path/to/ca/")
-       )
-     );
-   };
-   ```
-   ([#3770](https://github.com/syslog-ng/syslog-ng/pull/3770))
- * `mqtt() destination`: added `client-id` option. It specifies the unique client ID sent to the broker.
-   ([#3809](https://github.com/syslog-ng/syslog-ng/pull/3809))
+    selector-value,name-value-pair-to-be-created,list(foo,bar,baz)
+    ([#4051](https://github.com/syslog-ng/syslog-ng/pull/4051))
+  * `$(format-json)`: add --key-delimiter option to reconstruct JSON objects
+    using an alternative structure separator, that was created using the
+    key-delimiter() option of json-parser().
+    ([#4093](https://github.com/syslog-ng/syslog-ng/pull/4093))
+  * `json-parser()`: add key-delimiter() option to extract JSON structure
+    members into name-value pairs, so that the names are flattened using the
+    character specified, instead of dot.
+
+    Example:
+      Input: {"foo":{"key":"value"}}
+
+      Using json-parser() without key-delimiter() this is extracted to:
+
+          foo.key="value"
+
+      Using json-parser(key-delimiter("~")) this is extracted to:
+
+          foo~key="value"
+
+    This feature is useful in case the JSON keys contain dots themselves, in
+    those cases the syslog-ng representation is ambigious.
+    ([#4093](https://github.com/syslog-ng/syslog-ng/pull/4093))
 
 ## Bugfixes
 
- * `unset()`, `groupunset()`: fix unwanted removal of values on different log paths
+  * Fixed buffer handling of syslog and timestamp parsers
 
-   Due to a copy-on-write bug, `unset()` and `groupunset()` not only removed values
-   from the appropriate log paths, but from all the others where the same message
-   went through. This has been fixed.
-   ([#3803](https://github.com/syslog-ng/syslog-ng/pull/3803))
- * `regexp-parser()`: fix storing unnamed capture groups under `prefix()`
-   ([#3810](https://github.com/syslog-ng/syslog-ng/pull/3810))
- * `loggen`: cannot detect plugins on platforms with non .so shared libs (osx)
-   ([#3832](https://github.com/syslog-ng/syslog-ng/pull/3832))
+    Multiple buffer out-of-bounds issues have been fixed, which could cause
+    hangs, high CPU usage, or other undefined behavior.
+    ([#4110](https://github.com/syslog-ng/syslog-ng/pull/4110))
+  * Fixed building with LibreSSL
+    ([#4081](https://github.com/syslog-ng/syslog-ng/pull/4081))
+  * `network()`: Fixed a bug, where syslog-ng halted the input instead of skipping a character
+    in case of a character conversion error.
+    ([#4084](https://github.com/syslog-ng/syslog-ng/pull/4084))
+  * `redis()`: Fixed bug where using redis driver without the `batch-lines` option caused program crash.
+    ([#4114](https://github.com/syslog-ng/syslog-ng/pull/4114))
+  * `pdbtool`: fix a SIGABRT on FreeBSD that was triggered right before pdbtool
+    exits. Apart from being an ugly crash that produces a core file,
+    functionally the tool behaved correctly and this case does not affect
+    syslog-ng itself.
+    ([#4037](https://github.com/syslog-ng/syslog-ng/pull/4037))
+  * `regexp-parser()`: due to a change introduced in 3.37, named capture groups
+    are stored indirectly in the LogMessage to avoid copying of the value.  In
+    this case the name-value pair created with the regexp is only stored as a
+    reference (name + length of the original value), which improves performance
+    and makes such name-value pairs use less memory.  One omission in the
+    original change in 3.37 is that syslog-ng does not allow builtin values to
+    be stored indirectly (e.g.  $MESSAGE and a few of others) and this case
+    causes an assertion to fail and syslog-ng to crash with a SIGABRT. This
+    abort is now fixed. Here's a sample config that reproduces the issue:
 
-## Packaging
+        regexp-parser(patterns('(?<MESSAGE>.*)'));
+    ([#4043](https://github.com/syslog-ng/syslog-ng/pull/4043))
+  * set-tag: fix cloning issue when string literal were used (see #4062)
+    ([#4065](https://github.com/syslog-ng/syslog-ng/pull/4065))
+  * `add-contextual-data()`: fix high memory usage when using large CSV files
+    ([#4067](https://github.com/syslog-ng/syslog-ng/pull/4067))
 
- * `debian/control`: Added `libcriterion-dev` as a build dependency, where it is available from APT.
-   (`debian-bullseye`, `debian-testing`, `debian-sid`)
-   ([#3794](https://github.com/syslog-ng/syslog-ng/pull/3794))
- * `centos-7`: `kafka` and `mqtt` modules are now packaged.
+## Other changes
 
-   The following packages are used as dependencies:
-    * `librdkafka-devel` from EPEL 7
-    * `paho-c-devel` from copr:copr.fedorainfracloud.org:czanik:syslog-ng-githead
-   ([#3797](https://github.com/syslog-ng/syslog-ng/pull/3797))
- * `debian`: Added bullseye support.
-   ([#3794](https://github.com/syslog-ng/syslog-ng/pull/3794))
- * `bison`: support build with bison 3.8
-   ([#3784](https://github.com/syslog-ng/syslog-ng/pull/3784))
+  * The `json-c` library is no longer bundled in the syslog-ng source tarball
 
-## Notes to developers
+    Since all known OS package managers provide json-c packages nowadays, the json-c
+    submodule has been removed from the source tarball.
 
- * `dbld`: As new distributions use python3 by default it makes sense to explicitly state older platforms which use python2
-   instead of the other way around, so it is not necessary to add that new platform to the python3 case.
-   ([#3780](https://github.com/syslog-ng/syslog-ng/pull/3780))
- * `dbld`: move dbld image cache from DockerHub to GitHub
-
-   In 2021, GitHub introduced the GitHub Packages service. Among other
-   repositories - it provides a standard Docker registry. DBLD uses
-   this registry, to avoid unnecessary rebuilding of the images.
-   ([#3782](https://github.com/syslog-ng/syslog-ng/pull/3782))
+    The `--with-jsonc=internal` option of the `configure` script has been removed
+    accordingly, system libraries will be used instead. For special cases, the JSON
+    support can be disabled by specifying `--with-jsonc=no`.
+    ([#4078](https://github.com/syslog-ng/syslog-ng/pull/4078))
+  * platforms: Dropped support for ubuntu-impish as it became EOL
+    ([#4088](https://github.com/syslog-ng/syslog-ng/pull/4088))
 
 ## Credits
 
@@ -140,8 +121,7 @@ of syslog-ng, contribute.
 
 We would like to thank the following people for their contribution:
 
-Andras Mitzki, Antal Nemes, Attila Szakacs, Balazs Scheidler,
-Balázs Barkó, Benedek Cserhati, Colin Douch, Gabor Nagy, Laszlo Szemere,
-László Várady, Norbert Takacs, Parrag Szilárd, Peter Czanik (CzP),
-Peter Kokai, Robert Paschedag, Ryan Faircloth, Szilárd Parrag,
-Thomas Klausner, Zoltan Pallagi
+Alvin Šipraga, Andras Mitzki, Attila Szakacs, Balazs Scheidler,
+Bálint Horváth, Daniel Klauer, Fabrice Fontaine, Gabor Nagy,
+HenryTheSir, László Várady, Parrag Szilárd, Peter Kokai, Shikhar Vashistha,
+Szilárd Parrag, Vivin Peris

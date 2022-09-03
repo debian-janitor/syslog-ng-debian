@@ -94,7 +94,7 @@ synthetic_message_add_value_template_string(SyntheticMessage *self, GlobalConfig
 
   /* NOTE: we shouldn't use the name property for LogTemplate structs, see the comment at log_template_set_name() */
   value_template = log_template_new(cfg, name);
-  if (log_template_compile(value_template, value, error))
+  if (log_template_compile_with_type_hint(value_template, value, error))
     {
       synthetic_message_add_value_template(self, name, value_template);
       result = TRUE;
@@ -131,15 +131,16 @@ synthetic_message_apply(SyntheticMessage *self, CorrelationContext *context, Log
       GString *buffer = scratch_buffers_alloc_and_mark(&marker);
       for (i = 0; i < self->values->len; i++)
         {
-          LogTemplateEvalOptions options = {NULL, LTZ_LOCAL, 0, context ? context->key.session_id : NULL};
-          log_template_format_with_context(g_ptr_array_index(self->values, i),
-                                           context ? (LogMessage **) context->messages->pdata : &msg,
-                                           context ? context->messages->len : 1,
-                                           &options, buffer);
-          log_msg_set_value_by_name(msg,
-                                    ((LogTemplate *) g_ptr_array_index(self->values, i))->name,
-                                    buffer->str,
-                                    buffer->len);
+          LogMessageValueType type;
+          LogTemplateEvalOptions options = {NULL, LTZ_LOCAL, 0, context ? context->key.session_id : NULL, LM_VT_STRING};
+
+          log_template_format_value_and_type_with_context(g_ptr_array_index(self->values, i),
+                                                          context ? (LogMessage **) context->messages->pdata : &msg,
+                                                          context ? context->messages->len : 1,
+                                                          &options, buffer, &type);
+          log_msg_set_value_by_name_with_type(msg,
+                                              ((LogTemplate *) g_ptr_array_index(self->values, i))->name,
+                                              buffer->str, buffer->len, type);
         }
       scratch_buffers_reclaim_marked(marker);
     }

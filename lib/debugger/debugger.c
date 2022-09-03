@@ -44,7 +44,10 @@ struct _Debugger
 };
 
 static gboolean
-_format_nvpair(NVHandle handle, const gchar *name, const gchar *value, gssize length, gpointer user_data)
+_format_nvpair(NVHandle handle,
+               const gchar *name,
+               const gchar *value, gssize length,
+               LogMessageValueType type, gpointer user_data)
 {
   printf("%s=%.*s\n", name, (gint) length, value);
   return FALSE;
@@ -57,7 +60,7 @@ _display_msg_details(Debugger *self, LogMessage *msg)
 
   log_msg_values_foreach(msg, _format_nvpair, NULL);
   g_string_truncate(output, 0);
-  log_msg_print_tags(msg, output);
+  log_msg_format_tags(msg, output);
   printf("TAGS=%s\n", output->str);
   printf("\n");
   g_string_free(output, TRUE);

@@ -64,7 +64,7 @@ _py_invoke_template_function(const gchar *function_name, LogMessage *msg, gint a
 
   msg_debug("$(python): Invoking Python template function",
             evt_tag_str("function", function_name),
-            evt_tag_printf("msg", "%p", msg));
+            evt_tag_msg_reference(msg));
 
   args = _py_construct_args_tuple(msg, argc, argv);
   ret = PyObject_CallObject(callable, args);
@@ -103,12 +103,13 @@ _py_convert_return_value_to_result(const gchar *function_name, PyObject *ret, GS
 }
 
 static void
-tf_python(LogMessage *msg, gint argc, GString *argv[], GString *result)
+tf_python(LogMessage *msg, gint argc, GString *argv[], GString *result, LogMessageValueType *type)
 {
   PyGILState_STATE gstate;
   const gchar *function_name;
   PyObject *ret;
 
+  *type = LM_VT_STRING;
   if (argc == 0)
     return;
   function_name = argv[0]->str;

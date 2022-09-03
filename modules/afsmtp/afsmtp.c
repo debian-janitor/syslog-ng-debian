@@ -258,7 +258,7 @@ _smtp_message_add_recipient_from_template(smtp_message_t self, AFSMTPDriver *dri
                                           LogMessage *msg)
 {
   LogTemplateEvalOptions options = {&driver->template_options, LTZ_SEND,
-                                    driver->super.worker.instance.seq_num, NULL
+                                    driver->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                    };
   log_template_format(template, msg, &options, driver->str);
   smtp_add_recipient(self, afsmtp_wash_string (driver->str->str));
@@ -283,7 +283,7 @@ afsmtp_dd_msg_add_header(AFSMTPHeader *hdr, gpointer user_data)
   smtp_message_t message = ((gpointer *)user_data)[2];
 
   LogTemplateEvalOptions options = {&self->template_options, LTZ_LOCAL,
-                                    self->super.worker.instance.seq_num, NULL
+                                    self->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                    };
   log_template_format(hdr->template, msg, &options, self->str);
 
@@ -358,17 +358,17 @@ afsmtp_dd_cb_monitor(const gchar *buf, gint buflen, gint writing,
     case SMTP_CB_READING:
       msg_debug ("SMTP Session: SERVER",
                  evt_tag_str("driver", self->super.super.super.id),
-                 evt_tag_printf("message", "%.*s", buflen, buf));
+                 evt_tag_mem("message", buf, buflen));
       break;
     case SMTP_CB_WRITING:
       msg_debug("SMTP Session: CLIENT",
                 evt_tag_str("driver", self->super.super.super.id),
-                evt_tag_printf("message", "%.*s", buflen, buf));
+                evt_tag_mem("message", buf, buflen));
       break;
     case SMTP_CB_HEADERS:
       msg_debug("SMTP Session: HEADERS",
                 evt_tag_str("driver", self->super.super.super.id),
-                evt_tag_printf("data", "%.*s", buflen, buf));
+                evt_tag_mem("data", buf, buflen));
       break;
     }
 }
@@ -398,7 +398,7 @@ __build_message(AFSMTPDriver *self, LogMessage *msg, smtp_session_t session)
   message = smtp_add_message(session);
 
   LogTemplateEvalOptions options = {&self->template_options, LTZ_SEND,
-                                    self->super.worker.instance.seq_num, NULL
+                                    self->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                    };
   log_template_format(self->mail_from->template, msg, &options, self->str);
   smtp_set_reverse_path(message, afsmtp_wash_string(self->str->str));
@@ -408,7 +408,7 @@ __build_message(AFSMTPDriver *self, LogMessage *msg, smtp_session_t session)
   smtp_set_header(message, "From", NULL, NULL);
 
   LogTemplateEvalOptions eval_options = {&self->template_options, LTZ_SEND,
-                                         self->super.worker.instance.seq_num, NULL
+                                         self->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                         };
   log_template_format(self->subject_template, msg, &eval_options, self->str);
   smtp_set_header(message, "Subject", afsmtp_wash_string(self->str->str));

@@ -76,7 +76,7 @@ log_rewrite_set_pri_process(LogRewrite *s, LogMessage **pmsg, const LogPathOptio
   msg_trace("Setting syslog pri",
             evt_tag_int("old_pri", (*pmsg)->pri),
             evt_tag_int("new_pri", pri),
-            evt_tag_printf("msg", "%p", *pmsg));
+            evt_tag_msg_reference(*pmsg));
   (*pmsg)->pri = pri;
 }
 
@@ -87,8 +87,7 @@ log_rewrite_set_pri_clone(LogPipe *s)
   LogRewriteSetPri *cloned = (LogRewriteSetPri *) log_rewrite_set_pri_new(log_template_ref(self->pri),
                              s->cfg);
 
-  if (self->super.condition)
-    cloned->super.condition = filter_expr_clone(self->super.condition);
+  cloned->super.condition = filter_expr_clone(self->super.condition);
 
   return &cloned->super.super;
 }

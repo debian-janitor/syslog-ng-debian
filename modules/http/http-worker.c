@@ -135,6 +135,11 @@ _setup_static_options_in_curl(HTTPDestinationWorker *self)
   if (owner->ciphers)
     curl_easy_setopt(self->curl, CURLOPT_SSL_CIPHER_LIST, owner->ciphers);
 
+#if SYSLOG_NG_HAVE_DECL_CURLOPT_TLS13_CIPHERS
+  if (owner->tls13_ciphers)
+    curl_easy_setopt(self->curl, CURLOPT_TLS13_CIPHERS, owner->tls13_ciphers);
+#endif
+
   if (owner->proxy)
     curl_easy_setopt(self->curl, CURLOPT_PROXY, owner->proxy);
 
@@ -272,7 +277,7 @@ _add_message_to_batch(HTTPDestinationWorker *self, LogMessage *msg)
   if (owner->body_template)
     {
       LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND,
-                                        self->super.seq_num, NULL
+                                        self->super.seq_num, NULL, LM_VT_STRING
                                        };
       log_template_append_format(owner->body_template, msg, &options, self->request_body);
     }
@@ -749,7 +754,7 @@ _insert_single(LogThreadedDestWorker *s, LogMessage *msg)
 }
 
 static gboolean
-_thread_init(LogThreadedDestWorker *s)
+_init(LogThreadedDestWorker *s)
 {
   HTTPDestinationWorker *self = (HTTPDestinationWorker *) s;
   HTTPDestinationDriver *owner = (HTTPDestinationDriver *) self->super.owner;
@@ -771,7 +776,7 @@ _thread_init(LogThreadedDestWorker *s)
 }
 
 static void
-_thread_deinit(LogThreadedDestWorker *s)
+_deinit(LogThreadedDestWorker *s)
 {
   HTTPDestinationWorker *self = (HTTPDestinationWorker *) s;
 
@@ -797,8 +802,8 @@ http_dw_new(LogThreadedDestDriver *o, gint worker_index)
   HTTPDestinationDriver *owner = (HTTPDestinationDriver *) o;
 
   log_threaded_dest_worker_init_instance(&self->super, o, worker_index);
-  self->super.thread_init = _thread_init;
-  self->super.thread_deinit = _thread_deinit;
+  self->super.init = _init;
+  self->super.deinit = _deinit;
   self->super.flush = _flush;
   self->super.free_fn = http_dw_free;
 

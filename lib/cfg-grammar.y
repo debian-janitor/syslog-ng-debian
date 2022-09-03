@@ -316,6 +316,7 @@
 %token <cptr> LL_STRING               10433
 %token <token> LL_TOKEN               10434
 %token <cptr> LL_BLOCK                10435
+%token <cptr> LL_PLUGIN	              10436
 
 %destructor { free($$); } <cptr>
 
@@ -330,12 +331,13 @@
 %token KW_REKEY                       10508
 %token KW_ADD_PREFIX                  10509
 %token KW_REPLACE_PREFIX              10510
+%token KW_CAST                        10511
 
-%token KW_ON_ERROR                    10511
+%token KW_ON_ERROR                    10520
 
-%token KW_RETRIES                     10512
+%token KW_RETRIES                     10521
 
-%token KW_FETCH_NO_DATA_DELAY         10513
+%token KW_FETCH_NO_DATA_DELAY         10522
 /* END_DECLS */
 
 %type   <ptr> expr_stmt
@@ -497,19 +499,12 @@ rewrite_stmt
           }
 
 log_stmt
-        : KW_LOG
-          { cfg_lexer_push_context(lexer, LL_CONTEXT_LOG, NULL, "log statement"); }
-          '{' log_content '}'
-          { cfg_lexer_pop_context(lexer); }
-          {
-            $$ = $4;
-          }
-
+        : KW_LOG _log_context_push '{' log_content '}' _log_context_pop             { $$ = $4;}
 	;
 
 
 plugin_stmt
-        : LL_IDENTIFIER
+        : LL_PLUGIN
           {
             Plugin *p;
             gint context = LL_CONTEXT_ROOT;
@@ -528,13 +523,7 @@ plugin_stmt
 /* START_RULES */
 
 source_content
-        :
-          { cfg_lexer_push_context(lexer, LL_CONTEXT_SOURCE, NULL, "source statement"); }
-          source_items
-          { cfg_lexer_pop_context(lexer); }
-          {
-            $$ = log_expr_node_new_junction($2, &@$);
-          }
+        : _source_context_push source_items _source_context_pop   { $$ = log_expr_node_new_junction($2, &@$); }
         ;
 
 source_items
@@ -549,7 +538,7 @@ source_item
 	;
 
 source_plugin
-        : LL_IDENTIFIER
+        : LL_PLUGIN
           {
             Plugin *p;
             gint context = LL_CONTEXT_SOURCE;
@@ -592,11 +581,11 @@ source_afinter_option
 
 filter_content
         : {
-            FilterExprNode *last_filter_expr = NULL;
+            FilterExprNode *filter_expr = NULL;
 
-	    CHECK_ERROR_WITHOUT_MESSAGE(cfg_parser_parse(&filter_expr_parser, lexer, (gpointer *) &last_filter_expr, NULL), @$);
+	    CHECK_ERROR_WITHOUT_MESSAGE(cfg_parser_parse(&filter_expr_parser, lexer, (gpointer *) &filter_expr, NULL), @$);
 
-            $$ = log_expr_node_new_pipe(log_filter_pipe_new(last_filter_expr, configuration), &@$);
+            $$ = log_expr_node_new_pipe(log_filter_pipe_new(filter_expr, configuration), &@$);
 	  }
 	;
 
@@ -621,12 +610,7 @@ rewrite_content
         ;
 
 dest_content
-         : { cfg_lexer_push_context(lexer, LL_CONTEXT_DESTINATION, NULL, "destination statement"); }
-            dest_items
-           { cfg_lexer_pop_context(lexer); }
-           {
-             $$ = log_expr_node_new_junction($2, &@$);
-           }
+         : _destination_context_push dest_items _destination_context_pop               { $$ = log_expr_node_new_junction($2, &@$); }
          ;
 
 
@@ -642,7 +626,7 @@ dest_item
 	;
 
 dest_plugin
-        : LL_IDENTIFIER
+        : LL_PLUGIN
           {
             Plugin *p;
             gint context = LL_CONTEXT_DESTINATION;
@@ -760,10 +744,7 @@ log_flags_items
 /* END_RULES */
 
 options_stmt
-        : KW_OPTIONS
-          { cfg_lexer_push_context(lexer, LL_CONTEXT_OPTIONS, NULL, "global options"); }
-          '{' options_items '}'
-          { cfg_lexer_pop_context(lexer); }
+        : KW_OPTIONS _options_context_push '{' options_items '}' _options_context_pop
 	;
 
 template_stmt
@@ -786,26 +767,26 @@ template_def
 
 template_block
 	: KW_TEMPLATE string
-	  {
-	    last_template = log_template_new(configuration, $2);
+	  <ptr>{
+	    $$ = last_template = log_template_new(configuration, $2);
 	  }
-	  '{' template_items '}'						{ $$ = last_template; free($2); }
+	  '{' template_items '}'						{ $$ = $3; free($2); }
         ;
 
 template_simple
         : KW_TEMPLATE string
-          {
-	    last_template = log_template_new(configuration, $2);
+          <ptr>{
+	    $$ = last_template = log_template_new(configuration, $2);
           }
-          template_content_inner						{ $$ = last_template; free($2); }
+          template_content_inner						{ $$ = $3; free($2); }
 	;
 
 template_fn
         : KW_TEMPLATE_FUNCTION string
-          {
-	    last_template = log_template_new(configuration, $2);
+          <ptr>{
+	    $$ = last_template = log_template_new(configuration, $2);
           }
-          template_content_inner						{ $$ = last_template; free($2); }
+          template_content_inner						{ $$ = $3; free($2); }
 	;
 
 template_items
@@ -823,7 +804,7 @@ template_content_inner
           CHECK_ERROR_GERROR(log_template_compile(last_template, $1, &error), @1, error, "Error compiling template");
           free($1);
         }
-        | LL_IDENTIFIER '(' string ')'
+        | LL_IDENTIFIER '(' string_or_number ')'
         {
           GError *error = NULL;
 
@@ -833,10 +814,23 @@ template_content_inner
           CHECK_ERROR_GERROR(log_template_set_type_hint(last_template, $1, &error), @1, error, "Error setting the template type-hint \"%s\"", $1);
           free($1);
         }
+        | LL_NUMBER
+        {
+          gchar decimal[32];
+
+          g_snprintf(decimal, sizeof(decimal), "%" G_GINT64_FORMAT, $1);
+          log_template_compile_literal_string(last_template, decimal);
+          log_template_set_type_hint(last_template, "int64", NULL);
+        }
+        | LL_FLOAT
+        {
+          log_template_compile_literal_string(last_template, lexer->token_text->str);
+          log_template_set_type_hint(last_template, "float", NULL);
+        }
         ;
 
 template_content
-        : { last_template = log_template_new(configuration, NULL); } template_content_inner	{ $$ = last_template; }
+        : <ptr>{ $$ = last_template = log_template_new(configuration, NULL); } template_content_inner	{ $$ = $1; }
         ;
 
 template_content_list
@@ -854,18 +848,15 @@ template_item
 
 block_stmt
         : KW_BLOCK
-          { cfg_lexer_push_context(lexer, LL_CONTEXT_BLOCK_DEF, block_def_keywords, "block definition"); }
+          _block_def_context_push
           LL_IDENTIFIER LL_IDENTIFIER
           '(' { last_block_args = cfg_args_new(); } block_definition ')'
-          { cfg_lexer_push_context(lexer, LL_CONTEXT_BLOCK_CONTENT, NULL, "block content"); }
+          _block_content_context_push
           LL_BLOCK
+          _block_content_context_pop
+          _block_def_context_pop
           {
             CfgBlockGenerator *block;
-
-            /* block content */
-            cfg_lexer_pop_context(lexer);
-            /* block definition */
-            cfg_lexer_pop_context(lexer);
 
             gint context_type = cfg_lexer_lookup_context_type_by_name($3);
             CHECK_ERROR(context_type, @3, "unknown context \"%s\"", $3);
@@ -890,15 +881,7 @@ block_args
         ;
 
 block_arg
-        : LL_IDENTIFIER
-          {
-            cfg_lexer_push_context(lexer, LL_CONTEXT_BLOCK_ARG, NULL, "block argument");
-          }
-          LL_BLOCK
-          {
-            cfg_lexer_pop_context(lexer);
-            cfg_args_set(last_block_args, $1, $3); free($1); free($3);
-          }
+        : LL_IDENTIFIER _block_arg_context_push LL_BLOCK _block_arg_context_pop      { cfg_args_set(last_block_args, $1, $3); free($1); free($3); }
         ;
 
 options_items
@@ -946,7 +929,7 @@ options_item
 	| { last_stats_options = &configuration->stats_options; } stat_option
 	| { last_dns_cache_options = &configuration->dns_cache_options; } dns_cache_option
 	| { last_file_perm_options = &configuration->file_perm_options; } file_perm_option
-	| LL_IDENTIFIER
+	| LL_PLUGIN
           {
             Plugin *p;
             gint context = LL_CONTEXT_OPTIONS;
@@ -1130,7 +1113,7 @@ driver_option
         ;
 
 inner_source
-        : LL_IDENTIFIER
+        : LL_PLUGIN
           {
             Plugin *p;
             gint context = LL_CONTEXT_INNER_SRC;
@@ -1161,7 +1144,7 @@ source_driver_option
         ;
 
 inner_dest
-        : LL_IDENTIFIER
+        : LL_PLUGIN
           {
             Plugin *p;
             gint context = LL_CONTEXT_INNER_DEST;
@@ -1392,7 +1375,7 @@ matcher_flags
 value_pair_option
 	: KW_VALUE_PAIRS
           {
-            last_value_pairs = value_pairs_new();
+            last_value_pairs = value_pairs_new(configuration);
           }
           '(' vp_options ')'
           { $$ = last_value_pairs; }
@@ -1430,6 +1413,7 @@ vp_option
           vp_rekey_options ')'                           { value_pairs_add_transforms(last_value_pairs, last_vp_transset); }
         | KW_EXCLUDE '(' string_list ')'                 { value_pairs_add_glob_patterns(last_value_pairs, $3, FALSE); }
 	| KW_SCOPE '(' vp_scope_list ')'
+	| KW_CAST '(' yesno ')'                          { value_pairs_set_cast_to_strings(last_value_pairs, $3); }
 	;
 
 vp_scope_list
@@ -1478,6 +1462,35 @@ rewrite_condition_opt
           } ')'
         ;
 
+
+_root_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_ROOT, NULL, "root context"); };
+_root_context_pop: { cfg_lexer_pop_context(lexer); };
+_destination_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_DESTINATION, NULL, "destination statement"); };
+_destination_context_pop: { cfg_lexer_pop_context(lexer); };
+_source_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_SOURCE, NULL, "source statement"); };
+_source_context_pop:  { cfg_lexer_pop_context(lexer); };
+_parser_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_PARSER, NULL, "parser statement"); };
+_parser_context_pop: { cfg_lexer_pop_context(lexer); };
+_rewrite_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_REWRITE, NULL, "rewrite statement"); };
+_rewrite_context_pop: { cfg_lexer_pop_context(lexer); };
+_filter_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_FILTER, NULL, "filter statement"); };
+_filter_context_pop: { cfg_lexer_pop_context(lexer); };
+_log_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_LOG, NULL, "log statement"); };
+_log_context_pop: { cfg_lexer_pop_context(lexer); };
+_block_def_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_BLOCK_DEF, block_def_keywords, "block definition"); };
+_block_def_context_pop: { cfg_lexer_pop_context(lexer); };
+_block_ref_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_BLOCK_REF, NULL, "block reference"); };
+_block_ref_context_pop: { cfg_lexer_pop_context(lexer); };
+_block_content_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_BLOCK_CONTENT, NULL, "block content"); };
+_block_content_context_pop: { cfg_lexer_pop_context(lexer); };
+_block_arg_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_BLOCK_ARG, NULL, "block argument"); };
+_block_arg_context_pop: { cfg_lexer_pop_context(lexer); };
+_inner_dest_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_INNER_DEST, NULL, "within destination"); };
+_inner_dest_context_pop: { cfg_lexer_pop_context(lexer); };
+_inner_src_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_INNER_SRC, NULL, "within source"); };
+_inner_src_context_pop: { cfg_lexer_pop_context(lexer); };
+_options_context_push: { cfg_lexer_push_context(lexer, LL_CONTEXT_OPTIONS, NULL, "options statement"); };
+_options_context_pop: { cfg_lexer_pop_context(lexer); };
 
 /* END_RULES */
 

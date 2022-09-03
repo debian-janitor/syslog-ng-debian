@@ -249,7 +249,7 @@ afstomp_dd_disconnect(LogThreadedDestDriver *s)
 
 /* TODO escape '\0' when passing down the value */
 static gboolean
-afstomp_vp_foreach(const gchar *name, TypeHint type, const gchar *value, gsize value_len,
+afstomp_vp_foreach(const gchar *name, LogMessageValueType type, const gchar *value, gsize value_len,
                    gpointer user_data)
 {
   stomp_frame *frame = (stomp_frame *) (user_data);
@@ -265,7 +265,7 @@ afstomp_set_frame_body(STOMPDestDriver *self, GString *body, stomp_frame *frame,
   if (self->body_template)
     {
       LogTemplateEvalOptions options = {&self->template_options, LTZ_LOCAL,
-                                        self->super.worker.instance.seq_num, NULL
+                                        self->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                        };
       log_template_format(self->body_template, msg, &options, body);
       stomp_frame_set_body(frame, body->str, body->len);
@@ -279,7 +279,6 @@ afstomp_worker_publish(STOMPDestDriver *self, LogMessage *msg)
   GString *body = NULL;
   stomp_frame frame;
   stomp_frame recv_frame;
-  gchar seq_num[16];
 
   if (!self->conn)
     {
@@ -296,11 +295,17 @@ afstomp_worker_publish(STOMPDestDriver *self, LogMessage *msg)
   stomp_frame_add_header(&frame, "destination", self->destination);
   if (self->ack_needed)
     {
-      g_snprintf(seq_num, sizeof(seq_num), "%i", self->super.worker.instance.seq_num);
-      stomp_frame_add_header(&frame, "receipt", seq_num);
+      /*
+       * We check the server's response before sending a new frame to it.
+       * Because of this, we do not need a unique receipt header.
+       *
+       * This changes if multiple workers and/or batching support is introduced.
+       * Make sure to use a unique receipt-id if one of the above gets implemented.
+       */
+      stomp_frame_add_header(&frame, "receipt", "0");
     };
 
-  LogTemplateEvalOptions options = {&self->template_options, LTZ_SEND, self->super.worker.instance.seq_num, NULL};
+  LogTemplateEvalOptions options = {&self->template_options, LTZ_SEND, self->super.worker.instance.seq_num, NULL, LM_VT_STRING};
   value_pairs_foreach(self->vp, afstomp_vp_foreach, msg, &options, &frame);
 
   afstomp_set_frame_body(self, body, &frame, msg);

@@ -78,7 +78,7 @@ _fill_template(RedisDestWorker *self, LogMessage *msg, LogTemplate *template, gc
     {
       GString *buffer = scratch_buffers_alloc();
       LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND,
-                                        owner->super.worker.instance.seq_num, NULL
+                                        owner->super.worker.instance.seq_num, NULL, LM_VT_STRING
                                        };
       log_template_format(template, msg, &options, buffer);
       *size = buffer->len;
@@ -152,7 +152,7 @@ redis_worker_insert(LogThreadedDestWorker *s, LogMessage *msg)
   RedisDriver *owner = (RedisDriver *) self->super.owner;
   LogThreadedResult status = LTR_ERROR;
 
-  g_assert(owner->super.batch_lines == 0);
+  g_assert(owner->super.batch_lines <= 0);
 
   ScratchBuffersMarker marker;
   scratch_buffers_mark(&marker);
@@ -196,7 +196,7 @@ exit:
 
 
 static gboolean
-redis_worker_thread_init(LogThreadedDestWorker *d)
+redis_worker_init(LogThreadedDestWorker *d)
 {
   RedisDestWorker *self = (RedisDestWorker *) d;
   RedisDriver *owner = (RedisDriver *) self->super.owner;
@@ -228,7 +228,7 @@ redis_worker_disconnect(LogThreadedDestWorker *s)
 }
 
 static void
-redis_worker_thread_deinit(LogThreadedDestWorker *d)
+redis_worker_deinit(LogThreadedDestWorker *d)
 {
   RedisDestWorker *self = (RedisDestWorker *)d;
 
@@ -361,8 +361,8 @@ LogThreadedDestWorker *redis_worker_new(LogThreadedDestDriver *o, gint worker_in
 
   log_threaded_dest_worker_init_instance(&self->super, o, worker_index);
 
-  self->super.thread_init = redis_worker_thread_init;
-  self->super.thread_deinit = redis_worker_thread_deinit;
+  self->super.init = redis_worker_init;
+  self->super.deinit = redis_worker_deinit;
   self->super.connect = redis_worker_connect;
   self->super.disconnect = redis_worker_disconnect;
   self->super.insert = o->batch_lines > 0 ? redis_worker_insert_batch : redis_worker_insert;

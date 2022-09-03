@@ -28,7 +28,7 @@
 #include "syslog-ng.h"
 #include "eval.h"
 #include "timeutils/zoneinfo.h"
-#include "type-hinting.h"
+#include "logmsg/type-hinting.h"
 #include "common-template-typedefs.h"
 #include "atomic.h"
 
@@ -59,8 +59,19 @@ struct _LogTemplate
   gchar *template;
   GList *compiled_template;
   GlobalConfig *cfg;
-  guint escape:1, def_inline:1, trivial:1;
-  TypeHint type_hint;
+  guint escape:1, def_inline:1, trivial:1, literal:1;
+
+
+  /* This value stores the type-hint the user _explicitly_ specified.  If
+   * this is an automatic cast to string (in compat mode), this would be
+   * LM_VT_NONE while "type_hint" would be LM_VT_STRING */
+  LogMessageValueType explicit_type_hint;
+
+  /* This is the type-cast we do perform as we evaluate this template.  It
+   * might differ from explicit_type_hint in case we are in compatibility
+   * mode where the template would be cast to a string when the type-hint is
+   * unspecified.  */
+  LogMessageValueType type_hint;
 };
 
 /* appends the formatted output into result */
@@ -68,17 +79,22 @@ struct _LogTemplate
 void log_template_set_escape(LogTemplate *self, gboolean enable);
 gboolean log_template_set_type_hint(LogTemplate *self, const gchar *hint, GError **error);
 gboolean log_template_compile(LogTemplate *self, const gchar *template, GError **error);
+gboolean log_template_compile_with_type_hint(LogTemplate *self, const gchar *template_and_typehint, GError **error);
 void log_template_compile_literal_string(LogTemplate *self, const gchar *literal);
 gboolean log_template_is_literal_string(const LogTemplate *self);
 const gchar *log_template_get_literal_value(const LogTemplate *self, gssize *value_len);
 gboolean log_template_is_trivial(LogTemplate *self);
+NVHandle log_template_get_trivial_value_handle(LogTemplate *self);
 const gchar *log_template_get_trivial_value(LogTemplate *self, LogMessage *msg, gssize *value_len);
+const gchar *log_template_get_trivial_value_and_type(LogTemplate *self, LogMessage *msg, gssize *value_len,
+                                                     LogMessageValueType *type);
 void log_template_set_name(LogTemplate *self, const gchar *name);
 
 LogTemplate *log_template_new(GlobalConfig *cfg, const gchar *name);
 LogTemplate *log_template_ref(LogTemplate *s);
 void log_template_unref(LogTemplate *s);
 
+void log_template_options_clone(LogTemplateOptions *source, LogTemplateOptions *dest);
 void log_template_options_init(LogTemplateOptions *options, GlobalConfig *cfg);
 void log_template_options_destroy(LogTemplateOptions *options);
 void log_template_options_defaults(LogTemplateOptions *options);
@@ -88,5 +104,7 @@ void log_template_global_deinit(void);
 
 gboolean log_template_on_error_parse(const gchar *on_error, gint *out);
 void log_template_options_set_on_error(LogTemplateOptions *options, gint on_error);
+
+EVTTAG *evt_tag_template(const gchar *name, LogTemplate *template, LogMessage *msg, LogTemplateEvalOptions *options);
 
 #endif
