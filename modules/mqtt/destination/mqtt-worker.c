@@ -99,7 +99,7 @@ mqtt_dest_worker_resolve_template_topic_name(MQTTDestinationWorker *self, LogMes
 {
   MQTTDestinationDriver *owner = (MQTTDestinationDriver *) self->super.owner;
 
-  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL};
+  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL, LM_VT_STRING};
   log_template_format(owner->topic_name, msg, &options, self->topic_name_buffer);
 
   GError *error = NULL;
@@ -156,7 +156,7 @@ _format_message(LogThreadedDestWorker *s, LogMessage *msg)
   MQTTDestinationWorker *self = (MQTTDestinationWorker *)s;
   MQTTDestinationDriver *owner = (MQTTDestinationDriver *) self->super.owner;
 
-  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL};
+  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL, LM_VT_STRING};
 
   log_template_format(owner->message, msg, &options, self->string_to_write);
 }
@@ -215,7 +215,7 @@ _disconnect(LogThreadedDestWorker *s)
 }
 
 static gboolean
-_thread_init(LogThreadedDestWorker *s)
+_init(LogThreadedDestWorker *s)
 {
   MQTTDestinationWorker *self = (MQTTDestinationWorker *)s;
   MQTTDestinationDriver *owner = (MQTTDestinationDriver *) s->owner;
@@ -238,7 +238,7 @@ _thread_init(LogThreadedDestWorker *s)
 }
 
 static void
-_thread_deinit(LogThreadedDestWorker *s)
+_deinit(LogThreadedDestWorker *s)
 {
   MQTTDestinationWorker *self = (MQTTDestinationWorker *)s;
 
@@ -268,8 +268,8 @@ mqtt_dw_new(LogThreadedDestDriver *o, gint worker_index)
   self->topic_name_buffer = g_string_new("");
 
   log_threaded_dest_worker_init_instance(&self->super, o, worker_index);
-  self->super.thread_init = _thread_init;
-  self->super.thread_deinit = _thread_deinit;
+  self->super.init = _init;
+  self->super.deinit = _deinit;
   self->super.insert = _insert;
   self->super.free_fn = _free;
   self->super.connect = _connect;

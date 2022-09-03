@@ -1,5 +1,5 @@
 Name: syslog-ng
-Version: 3.35.1
+Version: 3.38.1
 Release: 2%{?dist}
 Summary: Next-generation syslog server
 
@@ -478,6 +478,7 @@ fi
 %{_libdir}/%{name}/libmap-value-pairs.so
 %{_libdir}/%{name}/libpseudofile.so
 %{_libdir}/%{name}/libregexp-parser.so
+%{_libdir}/%{name}/librate-limit-filter.so
 %{_libdir}/%{name}/libstardate.so
 %{_libdir}/%{name}/libsyslogformat.so
 %{_libdir}/%{name}/libsystem-source.so
@@ -620,6 +621,15 @@ fi
 
 
 %changelog
+* Mon Aug 15 2022 github-actions <github-actions@github.com> - 3.38.1-1
+- updated to 3.38.1
+
+* Mon May 30 2022 github-actions <github-actions@github.com> - 3.37.1-1
+- updated to 3.37.1
+
+* Mon Feb 28 2022 github-actions <github-actions@github.com> - 3.36.1-1
+- updated to 3.36.1
+
 * Wed Nov 10 2021 github-actions <github-actions@github.com> - 3.35.1-1
 - updated to 3.35.1
 

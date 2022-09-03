@@ -39,12 +39,11 @@ equivs                          [debian, ubuntu]
 libdistro-info-perl		[debian, ubuntu]
 make                            [centos, fedora]
 rpm-build                       [centos, fedora]
+which				[fedora]
 
 #############################################################################
 # Tarball related tools
 #############################################################################
-# needed to create a tarball from libjson-c
-doxygen                         [tarball]
 
 # docbook to generate man pages
 docbook-xsl                     [tarball]
@@ -95,6 +94,12 @@ python3-dev                 [ubuntu-focal]
 python-pip                      [centos, fedora, debian-stretch, debian-buster, ubuntu-trusty, ubuntu-xenial, ubuntu-bionic]
 python3-pip                     [debian, ubuntu]
 
+# python 3.10 has issues on Debian Testing
+# Nevertheless we should only downgrade for Light style-check tests, which uses pre-commit
+python3.11                   [devshell]
+python3.11-dev               [devshell]
+python3.11-venv              [devshell]
+
 # libmongoc and libbson packages on various platforms
 # Because we are using fixed version of libmongoc on Bionic, we need to
 # specify non versioned packages on other platforms to continiously support
@@ -123,7 +128,7 @@ libdbd-mysql                    [kira]
 lsb-release                     [kira]
 lsof                            [kira]
 netbase                         [kira]
-netcat                          [kira]
+netcat-openbsd                  [kira]
 openssh-client                  [kira]
 python-numpy                    [kira]
 python3-numpy                   [kira]
@@ -149,7 +154,7 @@ libc6-dbg                       [devshell]
 libglib2.0-0-dbgsym             [devshell]
 libjemalloc-dev                 [devshell]
 libjemalloc2-dbgsym             [devshell]
-libssl1.1-dbgsym                [devshell]
+libssl3-dbgsym                  [devshell]
 linux-perf                      [devshell]
 locales                         [devshell]
 lsof                            [devshell]
@@ -162,3 +167,4 @@ valgrind                        [devshell]
 openssh-client                  [devshell]
 astyle                          [devshell]
 snmptrapd                       [devshell]
+dwarves                         [devshell]

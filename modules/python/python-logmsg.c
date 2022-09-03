@@ -30,6 +30,7 @@
 #include "str-utils.h"
 #include "timeutils/unixtime.h"
 #include "timeutils/misc.h"
+#include "msg-format.h"
 
 #include <datetime.h>
 
@@ -171,7 +172,7 @@ py_log_message_new_empty(PyTypeObject *subtype, PyObject *args, PyObject *kwds)
 {
   PyObject *bookmark_data = NULL;
   const gchar *message = NULL;
-  gint message_length = 0;
+  Py_ssize_t message_length = 0;
 
   static const gchar *kwlist[] = {"message", "bookmark", NULL};
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "|z#O", (gchar **) kwlist, &message, &message_length, &bookmark_data))
@@ -203,7 +204,7 @@ static PyMappingMethods py_log_message_mapping =
 
 static gboolean
 _collect_nvpair_names_from_logmsg(NVHandle handle, const gchar *name, const gchar *value, gssize value_len,
-                                  gpointer user_data)
+                                  LogMessageValueType type, gpointer user_data)
 {
   PyObject *list = (PyObject *)user_data;
 
@@ -379,7 +380,7 @@ static PyObject *
 py_log_message_parse(PyObject *_none, PyObject *args, PyObject *kwrds)
 {
   const gchar *raw_msg;
-  gint raw_msg_length;
+  Py_ssize_t raw_msg_length;
 
   PyObject *py_parse_options;
 
@@ -408,7 +409,7 @@ py_log_message_parse(PyObject *_none, PyObject *args, PyObject *kwrds)
       return NULL;
     }
 
-  py_msg->msg = log_msg_new(raw_msg, raw_msg_length, parse_options);
+  py_msg->msg = msg_format_parse(parse_options, (const guchar *) raw_msg, raw_msg_length);
   py_msg->bookmark_data = NULL;
 
   return (PyObject *) py_msg;

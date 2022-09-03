@@ -279,8 +279,10 @@ log_writer_io_handler(gpointer s, GIOCondition cond)
 
       if (!main_loop_worker_job_quit())
         {
+          log_pipe_ref(&self->super);
           log_writer_work_perform(s, cond);
           log_writer_work_finished(s);
+          log_pipe_unref(&self->super);
         }
     }
 }
@@ -984,7 +986,7 @@ log_writer_format_log(LogWriter *self, LogMessage *lm, GString *result)
           {
             &self->options->template_options,
             LTZ_SEND,
-            seq_num, NULL,
+            seq_num, NULL, LM_VT_STRING
           };
 
           log_template_append_format(self->options->template, lm,
@@ -1030,7 +1032,7 @@ log_writer_format_log(LogWriter *self, LogMessage *lm, GString *result)
           {
             &self->options->template_options,
             LTZ_SEND,
-            seq_num, NULL
+            seq_num, NULL, LM_VT_STRING
           };
 
           log_template_format(template, lm, &options, result);
@@ -1097,7 +1099,7 @@ log_writer_format_log(LogWriter *self, LogMessage *lm, GString *result)
 
       p = result->str;
       /* NOTE: the size is calculated to leave trailing new line */
-      while ((p = find_cr_or_lf(p, result->str + result->len - p - 1)))
+      while ((p = find_cr_or_lf_or_nul(p, result->str + result->len - p - 1)))
         {
           *p = ' ';
           p++;

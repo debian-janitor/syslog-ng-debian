@@ -50,7 +50,7 @@ _format_collection_template(MongoDBDestWorker *self, LogMessage *msg)
 {
   MongoDBDestDriver *owner = (MongoDBDestDriver *) self->super.owner;
 
-  LogTemplateEvalOptions options = { &owner->template_options, LTZ_SEND, self->super.seq_num, NULL };
+  LogTemplateEvalOptions options = { &owner->template_options, LTZ_SEND, self->super.seq_num, NULL, LM_VT_STRING };
   log_template_format(owner->collection_template, msg, &options, self->collection);
 
   return self->collection->str;
@@ -202,7 +202,7 @@ _vp_obj_end(const gchar *name,
 }
 
 static gboolean
-_vp_process_value(const gchar *name, const gchar *prefix, TypeHint type,
+_vp_process_value(const gchar *name, const gchar *prefix, LogMessageValueType type,
                   const gchar *value, gsize value_len, gpointer *prefix_data, gpointer user_data)
 {
   bson_t *o;
@@ -218,7 +218,7 @@ _vp_process_value(const gchar *name, const gchar *prefix, TypeHint type,
 
   switch (type)
     {
-    case TYPE_HINT_BOOLEAN:
+    case LM_VT_BOOLEAN:
     {
       gboolean b;
 
@@ -235,7 +235,7 @@ _vp_process_value(const gchar *name, const gchar *prefix, TypeHint type,
         }
       break;
     }
-    case TYPE_HINT_INT32:
+    case LM_VT_INT32:
     {
       gint32 i;
 
@@ -252,7 +252,7 @@ _vp_process_value(const gchar *name, const gchar *prefix, TypeHint type,
         }
       break;
     }
-    case TYPE_HINT_INT64:
+    case LM_VT_INT64:
     {
       gint64 i;
 
@@ -270,7 +270,7 @@ _vp_process_value(const gchar *name, const gchar *prefix, TypeHint type,
 
       break;
     }
-    case TYPE_HINT_DOUBLE:
+    case LM_VT_DOUBLE:
     {
       gdouble d;
 
@@ -287,12 +287,12 @@ _vp_process_value(const gchar *name, const gchar *prefix, TypeHint type,
 
       break;
     }
-    case TYPE_HINT_DATETIME:
+    case LM_VT_DATETIME:
     {
-      guint64 i;
+      gint64 msec;
 
-      if (type_cast_to_datetime_int(value, &i, NULL))
-        bson_append_date_time(o, name, -1, (gint64)i);
+      if (type_cast_to_datetime_msec(value, &msec, NULL))
+        bson_append_date_time(o, name, -1, msec);
       else
         {
           gboolean r = type_cast_drop_helper(owner->template_options.on_error, value, "datetime");
@@ -305,8 +305,8 @@ _vp_process_value(const gchar *name, const gchar *prefix, TypeHint type,
 
       break;
     }
-    case TYPE_HINT_STRING:
-    case TYPE_HINT_LITERAL:
+    case LM_VT_STRING:
+    case LM_VT_JSON:
       bson_append_utf8(o, name, -1, value, value_len);
       break;
     default:
@@ -327,12 +327,13 @@ _worker_insert(LogThreadedDestWorker *s, LogMessage *msg)
 
   bson_reinit(self->bson);
 
-  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL};
+  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL, LM_VT_STRING};
   success = value_pairs_walk(owner->vp,
                              _vp_obj_start,
                              _vp_process_value,
                              _vp_obj_end,
                              msg, &options,
+                             0,
                              self);
 
   if (!success)
@@ -385,7 +386,7 @@ _worker_insert(LogThreadedDestWorker *s, LogMessage *msg)
 }
 
 static gboolean
-_worker_thread_init(LogThreadedDestWorker *s)
+_worker_init(LogThreadedDestWorker *s)
 {
   MongoDBDestWorker *self = (MongoDBDestWorker *) s;
 
@@ -396,7 +397,7 @@ _worker_thread_init(LogThreadedDestWorker *s)
 }
 
 static void
-_worker_thread_deinit(LogThreadedDestWorker *s)
+_worker_deinit(LogThreadedDestWorker *s)
 {
   MongoDBDestWorker *self = (MongoDBDestWorker *) s;
 
@@ -417,8 +418,8 @@ afmongodb_dw_new(LogThreadedDestDriver *owner, gint worker_index)
 
   log_threaded_dest_worker_init_instance(&self->super, owner, worker_index);
 
-  self->super.thread_init = _worker_thread_init;
-  self->super.thread_deinit = _worker_thread_deinit;
+  self->super.init = _worker_init;
+  self->super.deinit = _worker_deinit;
   self->super.connect = _worker_connect;
   self->super.disconnect = _worker_disconnect;
   self->super.insert = _worker_insert;

@@ -63,13 +63,14 @@ log_tags_get_by_name(const gchar *name)
 
      In both cases the return value is 0.
    */
-  guint id;
 
   g_assert(log_tags_hash != NULL);
 
   g_mutex_lock(&log_tags_lock);
 
-  id = GPOINTER_TO_UINT(g_hash_table_lookup(log_tags_hash, name)) - 1;
+  gpointer key = g_hash_table_lookup(log_tags_hash, name);
+  guint id = GPOINTER_TO_UINT(key) - 1;
+
   if (id == 0xffffffff)
     {
       if (log_tags_num < LOG_TAGS_MAX - 1)
@@ -170,6 +171,7 @@ log_tags_reinit_stats(void)
 {
   gint id;
 
+  g_mutex_lock(&log_tags_lock);
   stats_lock();
 
   for (id = 0; id < log_tags_num; id++)
@@ -185,6 +187,7 @@ log_tags_reinit_stats(void)
     }
 
   stats_unlock();
+  g_mutex_unlock(&log_tags_lock);
 }
 
 void

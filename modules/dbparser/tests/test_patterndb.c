@@ -21,6 +21,10 @@
  *
  */
 
+#include <criterion/criterion.h>
+#include <criterion/parameterized.h>
+#include "libtest/msg_parse_lib.h"
+
 #include "apphook.h"
 #include "logmsg/logmsg.h"
 #include "messages.h"
@@ -30,9 +34,6 @@
 #include "plugin.h"
 #include "cfg.h"
 #include "timerwheel.h"
-#include "libtest/msg_parse_lib.h"
-#include <criterion/criterion.h>
-#include <criterion/parameterized.h>
 
 #include <stdio.h>
 #include <sys/time.h>
@@ -212,15 +213,15 @@ assert_msg_matches_and_has_tag(PatternDB *patterndb, const gchar *pattern, const
 }
 
 void
-assert_output_message_nvpair_equals(gint ndx, const gchar *name, const gchar *value)
+assert_output_message_nvpair_equals(gint ndx, const gchar *name, const gchar *value, LogMessageValueType type)
 {
-  assert_log_message_value(_get_output_message(ndx), log_msg_get_value_handle(name), value);
+  assert_log_message_value_and_type_by_name(_get_output_message(ndx), name, value, type);
 }
 
 void
 assert_msg_matches_and_output_message_nvpair_equals_with_timeout(PatternDB *patterndb, const gchar *pattern,
     gint timeout, gint ndx,
-    const gchar *name, const gchar *value)
+    const gchar *name, const gchar *value, LogMessageValueType type)
 {
   LogMessage *msg;
 
@@ -228,7 +229,7 @@ assert_msg_matches_and_output_message_nvpair_equals_with_timeout(PatternDB *patt
   _process(patterndb, msg);
   _advance_time(patterndb, timeout);
 
-  assert_output_message_nvpair_equals(ndx, name, value);
+  assert_output_message_nvpair_equals(ndx, name, value, type);
   log_msg_unref(msg);
 }
 
@@ -252,10 +253,9 @@ assert_msg_matches_and_no_such_output_message(PatternDB *patterndb, const gchar 
 
 void
 assert_msg_matches_and_output_message_nvpair_equals(PatternDB *patterndb, const gchar *pattern, gint ndx,
-                                                    const gchar *name,
-                                                    const gchar *value)
+                                                    const gchar *name, const gchar *value, LogMessageValueType type)
 {
-  assert_msg_matches_and_output_message_nvpair_equals_with_timeout(patterndb, pattern, 0, ndx, name, value);
+  assert_msg_matches_and_output_message_nvpair_equals_with_timeout(patterndb, pattern, 0, ndx, name, value, type);
 }
 
 void
@@ -339,9 +339,9 @@ Test(pattern_db, test_correlation_rule_with_action_on_match)
   assert_msg_matches_and_has_tag(patterndb, "correlated-message-with-action-on-match", ".classifier.violation", TRUE);
 
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "correlated-message-with-action-on-match", 1, "MESSAGE",
-                                                      "generated-message-on-match");
+                                                      "generated-message-on-match", LM_VT_STRING);
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "correlated-message-with-action-on-match", 1,
-                                                      "context-id", "999");
+                                                      "context-id", "999", LM_VT_STRING);
   assert_msg_matches_and_output_message_has_tag(patterndb, "correlated-message-with-action-on-match", 1,
                                                 "correlated-msg-tag",
                                                 TRUE);
@@ -360,7 +360,7 @@ Test(pattern_db, test_correlation_rule_with_action_on_timeout)
 
   assert_msg_matches_and_output_message_nvpair_equals_with_timeout(patterndb,
       "correlated-message-with-action-on-timeout", 60, 1,
-      "MESSAGE", "generated-message-on-timeout");
+      "MESSAGE", "generated-message-on-timeout", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -376,7 +376,7 @@ Test(pattern_db, test_correlation_rule_with_action_condition)
 
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "correlated-message-with-action-condition", 1,
                                                       "MESSAGE",
-                                                      "generated-message-on-condition");
+                                                      "generated-message-on-condition", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -392,7 +392,7 @@ Test(pattern_db, test_correlation_rule_with_action_condition_filter)
 
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "correlated-message-with-action-condition-filter", 1,
                                                       "MESSAGE",
-                                                      "generated-message-on-condition");
+                                                      "generated-message-on-condition", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -417,7 +417,7 @@ Test(pattern_db, test_correlation_rule_with_rate_limited_action)
 
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "correlated-message-with-rate-limited-action", 1,
                                                       "MESSAGE",
-                                                      "generated-message-rate-limit");
+                                                      "generated-message-rate-limit", LM_VT_STRING);
   _dont_reset_patterndb_state_for_the_next_call();
   assert_msg_matches_and_no_such_output_message(patterndb, "correlated-message-with-rate-limited-action", 3);
   _dont_reset_patterndb_state_for_the_next_call();
@@ -426,7 +426,7 @@ Test(pattern_db, test_correlation_rule_with_rate_limited_action)
   _advance_time(patterndb, 120);
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "correlated-message-with-rate-limited-action", 5,
                                                       "MESSAGE",
-                                                      "generated-message-rate-limit");
+                                                      "generated-message-rate-limit", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -441,7 +441,7 @@ Test(pattern_db, test_simple_rule_with_action_on_match)
   assert_msg_matches_and_has_tag(patterndb, "simple-message-with-action-on-match", ".classifier.violation", TRUE);
 
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "simple-message-with-action-on-match", 1, "MESSAGE",
-                                                      "generated-message-on-match");
+                                                      "generated-message-on-match", LM_VT_STRING);
   assert_msg_matches_and_output_message_has_tag(patterndb, "simple-message-with-action-on-match", 1, "simple-msg-tag",
                                                 TRUE);
 
@@ -466,7 +466,7 @@ Test(pattern_db, test_simple_rule_with_rate_limited_action)
    * [5] GENERATED (as rate limit was met again due to advance time */
 
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "simple-message-with-rate-limited-action", 1, "MESSAGE",
-                                                      "generated-message-rate-limit");
+                                                      "generated-message-rate-limit", LM_VT_STRING);
   _dont_reset_patterndb_state_for_the_next_call();
   assert_msg_matches_and_no_such_output_message(patterndb, "simple-message-with-rate-limited-action", 3);
   _dont_reset_patterndb_state_for_the_next_call();
@@ -474,7 +474,7 @@ Test(pattern_db, test_simple_rule_with_rate_limited_action)
   _dont_reset_patterndb_state_for_the_next_call();
   _advance_time(patterndb, 120);
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "simple-message-with-rate-limited-action", 5, "MESSAGE",
-                                                      "generated-message-rate-limit");
+                                                      "generated-message-rate-limit", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -489,7 +489,7 @@ Test(pattern_db, test_simple_rule_with_action_condition)
   assert_msg_matches_and_has_tag(patterndb, "simple-message-with-action-condition", ".classifier.violation", TRUE);
 
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "simple-message-with-action-condition", 1, "MESSAGE",
-                                                      "generated-message-on-condition");
+                                                      "generated-message-on-condition", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -541,12 +541,12 @@ Test(pattern_db, pdbtest_patterndb_message_property_inheritance_enabled)
   gchar *filename;
   PatternDB *patterndb = _create_pattern_db(pdb_inheritance_enabled_skeleton, &filename);
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern-with-inheritance-enabled", 1, "MESSAGE",
-                                                      "pattern-with-inheritance-enabled");
+                                                      "pattern-with-inheritance-enabled", LM_VT_STRING);
   assert_msg_matches_and_output_message_has_tag(patterndb, "pattern-with-inheritance-enabled", 1, "basetag1", TRUE);
   assert_msg_matches_and_output_message_has_tag(patterndb, "pattern-with-inheritance-enabled", 1, "basetag2", TRUE);
   assert_msg_matches_and_output_message_has_tag(patterndb, "pattern-with-inheritance-enabled", 1, "actiontag", TRUE);
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern-with-inheritance-enabled", 1, "actionkey",
-                                                      "actionvalue");
+                                                      "actionvalue", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -557,12 +557,13 @@ Test(pattern_db, test_patterndb_message_property_inheritance_disabled)
   gchar *filename;
   PatternDB *patterndb = _create_pattern_db(pdb_inheritance_disabled_skeleton, &filename);
 
-  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern-with-inheritance-disabled", 1, "MESSAGE", NULL);
+  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern-with-inheritance-disabled", 1, "MESSAGE", NULL,
+                                                      LM_VT_NULL);
   assert_msg_matches_and_output_message_has_tag(patterndb, "pattern-with-inheritance-disabled", 1, "basetag1", FALSE);
   assert_msg_matches_and_output_message_has_tag(patterndb, "pattern-with-inheritance-disabled", 1, "basetag2", FALSE);
   assert_msg_matches_and_output_message_has_tag(patterndb, "pattern-with-inheritance-disabled", 1, "actiontag", TRUE);
   assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern-with-inheritance-disabled", 1, "actionkey",
-                                                      "actionvalue");
+                                                      "actionvalue", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -577,27 +578,27 @@ Test(pattern_db, test_patterndb_message_property_inheritance_context)
   _feed_message_to_correlation_state(patterndb, "prog2", "pattern-with-inheritance-context", "merged2", "merged2");
   _advance_time(patterndb, 60);
 
-  assert_output_message_nvpair_equals(2, "MESSAGE", "action message");
-  assert_output_message_nvpair_equals(2, "merged1", "merged1");
-  assert_output_message_nvpair_equals(2, "merged2", "merged2");
+  assert_output_message_nvpair_equals(2, "MESSAGE", "action message", LM_VT_STRING);
+  assert_output_message_nvpair_equals(2, "merged1", "merged1", LM_VT_STRING);
+  assert_output_message_nvpair_equals(2, "merged2", "merged2", LM_VT_STRING);
   assert_output_message_has_tag(2, "actiontag", TRUE);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
 }
 
-Test(pattern_db, test_patterndb_context_length)
+Test(pattern_db, test_patterndb_context_length_works_and_is_typed)
 {
   gchar *filename;
   PatternDB *patterndb = _create_pattern_db(pdb_msg_count_skeleton, &filename);
 
-  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern13", 1, "CONTEXT_LENGTH", "2");
-  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern14", 1, "CONTEXT_LENGTH", "2");
+  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern13", 1, "CONTEXT_LENGTH", "2", LM_VT_INT32);
+  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern14", 1, "CONTEXT_LENGTH", "2", LM_VT_INT32);
 
   assert_msg_with_program_matches_and_nvpair_equals(patterndb, "prog2", "pattern15-a", "p15", "-a");
 
   _dont_reset_patterndb_state_for_the_next_call();
-  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern15-b", 2, "fired", "true");
+  assert_msg_matches_and_output_message_nvpair_equals(patterndb, "pattern15-b", 2, "fired", "true", LM_VT_STRING);
 
   _destroy_pattern_db(patterndb, filename);
   g_free(filename);
@@ -796,6 +797,7 @@ void setup(void)
   cfg_load_module(configuration, "basicfuncs");
   cfg_load_module(configuration, "syslogformat");
   pattern_db_global_init();
+  cfg_set_version_without_validation(configuration, VERSION_VALUE_4_0);
 }
 
 void teardown(void)

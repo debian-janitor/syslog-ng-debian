@@ -105,7 +105,7 @@ tf_graphite_prepare(LogTemplateFunction *self, gpointer s, LogTemplate *parent,
       log_template_compile(state->timestamp_template, "$R_UNIXTIME", NULL);
     }
 
-  state->vp = value_pairs_new_from_cmdline (parent->cfg, &argc, &argv, FALSE, error);
+  state->vp = value_pairs_new_from_cmdline (parent->cfg, &argc, &argv, NULL, error);
   if (!state->vp)
     return FALSE;
 
@@ -125,7 +125,7 @@ typedef struct _TFGraphiteForeachUserData
 
 /* TODO escape '\0' when passing down the value */
 static gboolean
-tf_graphite_foreach_func(const gchar *name, TypeHint type, const gchar *value,
+tf_graphite_foreach_func(const gchar *name, LogMessageValueType type, const gchar *value,
                          gsize value_len, gpointer user_data)
 {
   TFGraphiteForeachUserData *data = (TFGraphiteForeachUserData *) user_data;
@@ -159,13 +159,14 @@ tf_graphite_format(GString *result, ValuePairs *vp, LogMessage *msg, LogTemplate
 
 static void
 tf_graphite_call(LogTemplateFunction *self, gpointer s,
-                 const LogTemplateInvokeArgs *args, GString *result)
+                 const LogTemplateInvokeArgs *args, GString *result, LogMessageValueType *type)
 {
   TFGraphiteState *state = (TFGraphiteState *)s;
   gint i;
   gboolean r = TRUE;
   gsize orig_size = result->len;
 
+  *type = LM_VT_STRING;
   for (i = 0; i < args->num_messages; i++)
     r &= tf_graphite_format(result, state->vp, args->messages[i], state->timestamp_template, args->options);
 

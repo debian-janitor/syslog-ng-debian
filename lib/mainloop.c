@@ -390,6 +390,12 @@ main_loop_get_current_config(MainLoop *self)
   return self->current_configuration;
 }
 
+GlobalConfig *
+main_loop_get_pending_new_config(MainLoop *self)
+{
+  return self->new_config;
+}
+
 /* main_loop_verify_config
  * compares active configuration versus config file */
 
@@ -596,6 +602,9 @@ main_loop_init(MainLoop *self, MainLoopOptions *options)
   setup_signals(self);
 
   self->current_configuration = cfg_new(0);
+
+  if (self->options->disable_module_discovery)
+    self->current_configuration->use_plugin_discovery = FALSE;
 }
 
 /*

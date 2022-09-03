@@ -21,11 +21,10 @@
  *
  */
 
-#include "libtest/cr_template.h"
-#include "libtest/grab-logging.h"
-#include "libtest/testutils.h"
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
+#include "libtest/cr_template.h"
+#include "libtest/grab-logging.h"
 
 #include "apphook.h"
 #include "plugin.h"
@@ -190,7 +189,7 @@ Test(basicfuncs, test_str_funcs)
 #endif
   start_grabbing_messages();
   assert_template_format("$(dns-resolve-ip --use-dns=no --dns-cache=yes 123.123.123.123)", "123.123.123.123");
-  assert_grabbed_messages_contain("WARNING: With use-dns(no), dns-cache() will be forced to 'no' too!", NULL);
+  assert_grabbed_log_contains("WARNING: With use-dns(no), dns-cache() will be forced to 'no' too!");
   stop_grabbing_messages();
 
   assert_template_format("$(length $HOST $PID)", "5 5");
@@ -552,6 +551,20 @@ Test(basicfuncs, test_context_funcs)
                                       "\"value,with,a,comma\",\"value,with,a,comma\"");
 }
 
+Test(basicfuncs, test_vp_funcs)
+{
+  assert_template_format_with_context("$(values .unix.*)", "command,1000,1000");
+  assert_template_format_with_context("$(values .foo.*)", "");
+  assert_template_format_with_context("$(values PID PROGRAM)", "23323,syslog-ng");
+  assert_template_format_with_context("$(values PROGRAM PID)", "23323,syslog-ng");
+  assert_template_format_with_context("$(values)", "");
+  assert_template_format_with_context("$(names .unix.*)", ".unix.cmd,.unix.gid,.unix.uid");
+  assert_template_format_with_context("$(names .foo.*)", "");
+  assert_template_format_with_context("$(names PID PROGRAM)", "PID,PROGRAM");
+  assert_template_format_with_context("$(names PROGRAM PID)", "PID,PROGRAM");
+  assert_template_format_with_context("$(names)", "");
+}
+
 
 Test(basicfuncs, test_tfurlencode)
 {
@@ -581,7 +594,7 @@ Test(basicfuncs, test_iterate)
   LogTemplate *template = log_template_new(configuration, NULL);
   cr_assert(log_template_compile(template, "Some prefix $(iterate \"$(+ 1 $_)\" 0)", NULL));
 
-  LogTemplateEvalOptions options = {NULL, LTZ_LOCAL, 999, ""};
+  LogTemplateEvalOptions options = {NULL, LTZ_LOCAL, 999, "", LM_VT_STRING};
   log_template_format(template, msg, &options, result);
   cr_assert_str_eq(result->str, "Some prefix 0");
 
@@ -637,8 +650,8 @@ ParameterizedTestParameters(basicfuncs, test_filter)
     { "Something $(filter ('$_' eq '0') '')", "Something " },
     { "$(filter ('1' eq '0') '')", "" },
     { "$(filter message('árvíztűrőtükörfúrógép') 'doesnotchange')", "doesnotchange" },
-    { "$(filter (message('árvíz') and ('$APP.VALUE' == 'value')) 'doesnotchange')", "doesnotchange" },
-    { "$(filter (message('donotmatch') or ('$APP.VALUE' == 'value')) 'doesnotchange')", "doesnotchange" },
+    { "$(filter (message('árvíz') and ('${APP.VALUE}' eq 'value')) 'doesnotchange')", "doesnotchange" },
+    { "$(filter (message('donotmatch') or ('${APP.VALUE}' eq 'value')) 'doesnotchange')", "doesnotchange" },
     { "$(filter ('$YEAR' ge '1900') 'doesnotchange')", "doesnotchange" },
     { "$(filter ('$YEAR' le '1900') 'doesnotchange')", "" },
   };

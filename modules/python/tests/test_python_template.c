@@ -19,6 +19,11 @@
  * COPYING for details.
  */
 
+/* this has to come first for modules which include the Python.h header */
+#include "python-module.h"
+
+#include <criterion/criterion.h>
+
 #include "python-helpers.h"
 #include "python-logmsg.h"
 #include "python-logtemplate.h"
@@ -32,7 +37,6 @@
 
 #include "python-integerpointer.h"
 
-#include <criterion/criterion.h>
 
 static MsgFormatOptions parse_options;
 
@@ -109,7 +113,7 @@ TestSuite(python_log_logtemplate, .init = setup, .fini = teardown);
 static PyLogMessage *
 create_parsed_message(const gchar *raw_msg)
 {
-  LogMessage *msg = log_msg_new(raw_msg, strlen(raw_msg), &parse_options);
+  LogMessage *msg = msg_format_parse(&parse_options, (const guchar *) raw_msg, strlen(raw_msg));
 
   PyLogMessage *py_log_msg = (PyLogMessage *)py_log_message_new(msg);
   log_msg_unref(msg);

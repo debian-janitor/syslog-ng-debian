@@ -117,7 +117,7 @@ _serialize_and_write_message_to_disk(LogQueueDiskNonReliable *self, LogMessage *
 {
   ScratchBuffersMarker marker;
   GString *write_serialized = scratch_buffers_alloc_and_mark(&marker);
-  if (!qdisk_serialize_msg(self->super.qdisk, msg, write_serialized))
+  if (!log_queue_disk_serialize_msg(&self->super, msg, write_serialized))
     {
       scratch_buffers_reclaim_marked(marker);
       return FALSE;
@@ -169,7 +169,7 @@ _move_messages_from_overflow(LogQueueDiskNonReliable *self)
     }
 }
 
-static void
+static gboolean
 _move_messages_from_disk_to_qout(LogQueueDiskNonReliable *self)
 {
   do
@@ -181,26 +181,32 @@ _move_messages_from_disk_to_qout(LogQueueDiskNonReliable *self)
       LogMessage *msg = log_queue_disk_read_message(&self->super, &path_options);
 
       if (!msg)
-        break;
+        return FALSE;
 
       g_queue_push_tail(self->qout, msg);
       g_queue_push_tail(self->qout, LOG_PATH_OPTIONS_TO_POINTER(&path_options));
       log_queue_memory_usage_add(&self->super.super, log_msg_get_size(msg));
     }
   while (HAS_SPACE_IN_QUEUE(self->qout));
+
+  return TRUE;
 }
 
-static inline void
+static inline gboolean
 _maybe_move_messages_among_queue_segments(LogQueueDiskNonReliable *self)
 {
+  gboolean ret = TRUE;
+
   if (qdisk_is_read_only(self->super.qdisk))
-    return;
+    return TRUE;
 
   if (self->qout->length == 0 && self->qout_size > 0)
-    _move_messages_from_disk_to_qout(self);
+    ret = _move_messages_from_disk_to_qout(self);
 
   if (self->qoverflow->length > 0)
     _move_messages_from_overflow(self);
+
+  return ret;
 }
 
 /* runs only in the output thread */
@@ -251,7 +257,7 @@ _rewind_backlog(LogQueue *s, guint rewind_count)
 static void
 _rewind_backlog_all(LogQueue *s)
 {
-  _rewind_backlog(s, -1);
+  _rewind_backlog(s, G_MAXUINT);
 }
 
 static inline LogMessage *
@@ -288,6 +294,7 @@ _pop_head(LogQueue *s, LogPathOptions *path_options)
 {
   LogQueueDiskNonReliable *self = (LogQueueDiskNonReliable *)s;
   LogMessage *msg = NULL;
+  gboolean stats_update = TRUE;
 
   g_mutex_lock(&s->lock);
 
@@ -312,14 +319,18 @@ _pop_head(LogQueue *s, LogPathOptions *path_options)
     }
 
 success:
-  _maybe_move_messages_among_queue_segments(self);
+  if (!_maybe_move_messages_among_queue_segments(self))
+    {
+      stats_update = FALSE;
+    }
 
   g_mutex_unlock(&s->lock);
 
   if (s->use_backlog)
     _push_tail_qbacklog(self, msg, path_options);
 
-  log_queue_queued_messages_dec(s);
+  if (stats_update)
+    log_queue_queued_messages_dec(s);
 
   return msg;
 }
@@ -413,7 +424,7 @@ _push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *path_options)
   if (_is_msg_serialization_needed_hint(self))
     {
       serialized_msg = scratch_buffers_alloc_and_mark(&marker);
-      if (!qdisk_serialize_msg(self->super.qdisk, msg, serialized_msg))
+      if (!log_queue_disk_serialize_msg(&self->super, msg, serialized_msg))
         {
           msg_error("Failed to serialize message for non-reliable disk-buffer, dropping message",
                     evt_tag_str("filename", qdisk_get_filename(self->super.qdisk)),
@@ -452,8 +463,12 @@ _push_tail(LogQueue *s, LogMessage *msg, const LogPathOptions *path_options)
     }
 
 queued:
-  log_queue_push_notify(s);
   log_queue_queued_messages_inc(s);
+
+  /* this releases the queue's lock for a short time, which may violate the
+   * consistency of the disk-buffer, so it must be the last call under lock in this function
+   */
+  log_queue_push_notify(s);
 
 exit:
   g_mutex_unlock(&s->lock);

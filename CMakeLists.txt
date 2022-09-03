@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.14)
 
 # use, i.e. don't skip the full RPATH for the build tree
 set(CMAKE_SKIP_BUILD_RPATH  FALSE)
@@ -24,7 +24,6 @@ include(CheckIncludeFiles)
 include(ExternalProject)
 include(external_or_find_package)
 include(add_module)
-include(add_tests)
 include(module_switch)
 
 set(MEMORYCHECK_SUPPRESSIONS_FILE "${PROJECT_SOURCE_DIR}/tests/valgrind/unit-test-leak.supp")
@@ -206,9 +205,9 @@ endif()
 
 find_package(OpenSSL REQUIRED)
 find_package(FLEX REQUIRED)
-find_package(LibNet REQUIRED)
+find_package(LIBNET REQUIRED)
 find_package(Resolv REQUIRED)
-find_package(Wrap)
+find_package(WRAP)
 find_package(criterion)
 find_package(Inotify)
 find_package(LIBCAP)
@@ -332,6 +331,8 @@ if (BUILD_TESTING AND NOT CRITERION_FOUND)
   message(FATAL_ERROR "BUILD_TESTING enabled without criterion detected!")
 endif()
 
+include(add_tests)
+
 if (CRITERION_FOUND)
   set(CTEST_ENVIRONMENT
     "G_SLICE=always-malloc,debug-blocks"
@@ -370,7 +371,8 @@ if (ENABLE_EXTRA_WARNINGS)
     -Wold-style-definition
     -Wundef
     -Wignored-qualifiers
-    -Wfloat-conversion)
+    -Wfloat-conversion
+    -Wbad-function-cast)
 
 if ("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
   set(EXTRA_WARNINGS

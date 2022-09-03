@@ -39,7 +39,7 @@ _format_message_and_key(KafkaDestWorker *self, LogMessage *msg)
 {
   KafkaDestDriver *owner = (KafkaDestDriver *) self->super.owner;
 
-  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL};
+  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL, LM_VT_STRING};
   log_template_format(owner->message, msg, &options, self->message);
 
   if (owner->key)
@@ -50,7 +50,7 @@ const gchar *
 kafka_dest_worker_resolve_template_topic_name(KafkaDestWorker *self, LogMessage *msg)
 {
   KafkaDestDriver *owner = (KafkaDestDriver *) self->super.owner;
-  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL};
+  LogTemplateEvalOptions options = {&owner->template_options, LTZ_SEND, self->super.seq_num, NULL, LM_VT_STRING};
   log_template_format(owner->topic_name, msg, &options, self->topic_name_buffer);
 
   GError *error = NULL;
@@ -374,14 +374,14 @@ kafka_dest_worker_free(LogThreadedDestWorker *s)
 }
 
 static void
-_thread_deinit(LogThreadedDestWorker *s)
+_deinit(LogThreadedDestWorker *s)
 {
   kafka_dd_shutdown(s->owner);
   log_threaded_dest_worker_deinit_method(s);
 }
 
 static gboolean
-_thread_init(LogThreadedDestWorker *s)
+_init(LogThreadedDestWorker *s)
 {
   KafkaDestWorker *self = (KafkaDestWorker *) s;
   if (_is_poller_thread(self))
@@ -419,8 +419,8 @@ _set_methods(KafkaDestWorker *self)
 {
   KafkaDestDriver *owner = (KafkaDestDriver *) self->super.owner;
 
-  self->super.thread_init = _thread_init;
-  self->super.thread_deinit = _thread_deinit;
+  self->super.init = _init;
+  self->super.deinit = _deinit;
   self->super.free_fn = kafka_dest_worker_free;
 
   if (owner->transaction_commit)

@@ -37,6 +37,7 @@ typedef struct _MainLoopOptions
   gboolean syntax_only;
   gboolean interactive_mode;
   gboolean server_mode;
+  gboolean disable_module_discovery;
 } MainLoopOptions;
 
 extern ThreadId main_thread_handle;
@@ -72,6 +73,7 @@ void main_loop_run(MainLoop *self);
 
 MainLoop *main_loop_get_instance(void);
 GlobalConfig *main_loop_get_current_config(MainLoop *self);
+GlobalConfig *main_loop_get_pending_new_config(MainLoop *self);
 void main_loop_init(MainLoop *self, MainLoopOptions *options);
 void main_loop_deinit(MainLoop *self);
 

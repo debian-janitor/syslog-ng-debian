@@ -301,27 +301,27 @@ word	[^ \#'"\(\)\{\}\[\]\\;\r\n\t,|\.@:]
 =>                         { return LL_ARROW; }
 (-|\+)?{digit}+\.{digit}+  { yylval->fnum = strtod(yytext, NULL); return LL_FLOAT; }
 0x{xdigit}+ 		   {
-                             if (!parse_number_with_suffix(yytext, &yylval->num))
+                             if (!parse_int64_base16(yytext, &yylval->num))
                                {
                                  return LL_ERROR;
                                }
                              return LL_NUMBER;
                            }
 0{odigit}+		   {
-                             if (!parse_number_with_suffix(yytext, &yylval->num))
+                             if (!parse_int64_base8(yytext, &yylval->num))
                                {
                                  return LL_ERROR;
                                }
                              return LL_NUMBER;
                            }
 (-|\+)?{digit}+(M|m|G|g|k|K)?(i|I)?(b|B)? {
-                             if (!parse_number_with_suffix(yytext, &yylval->num))
+                             if (!parse_int64_with_suffix(yytext, &yylval->num))
                                {
                                  return LL_ERROR;
                                }
                              return LL_NUMBER;
                            }
-({word}+(\.)?)*{word}+ 	   { return cfg_lexer_lookup_keyword(yyextra, yylval, yylloc, yytext); }
+({word}+(\.)?)*{word}+ 	   { return cfg_lexer_map_word_to_token(yyextra, yylval, yylloc, yytext); }
 \,			   ;
 
 \"                         {
