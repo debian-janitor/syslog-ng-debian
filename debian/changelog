@@ -1,3 +1,13 @@
+syslog-ng (3.38.1-1~1.gbpe2220d) UNRELEASED; urgency=medium
+
+  ** SNAPSHOT build @e2220d6313308be92a609c8f67da7c4ed62c483a **
+
+  [ Attila Szalay ]
+  * Removed support upgrading from ancient (older than version 3.5) versions
+  * New upstream version 3.38.1
+
+ -- SZALAY Attila <sasa@debian.org>  Sat, 03 Sep 2022 20:30:48 +0100
+
 syslog-ng (3.35.1-1) unstable; urgency=medium
 
   * Enable pristine-tar branchwide
