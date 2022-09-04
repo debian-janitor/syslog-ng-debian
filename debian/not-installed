@@ -3,7 +3,3 @@ usr/share/syslog-ng/include/scl/hdfs/plugin.conf
 usr/share/syslog-ng/include/scl/elasticsearch/elastic-java.conf
 usr/lib/syslog-ng/syslog-ng/libtest/libsyslog-ng-test.a
 usr/lib/*/pkgconfig/syslog-ng-test.pc
-
-# Temporally add new files until a decision can be made where to put them
-usr/share/syslog-ng/include/scl/kubernetes/kubernetes.conf
-usr/share/syslog-ng/include/scl/mariadb/audit.conf
