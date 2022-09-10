@@ -14,5 +14,5 @@ Tests: baseconfig
 Restrictions: needs-root, allow-stderr
 
 Tests: testinitscript
-Depends: @, sysvinit-core
+Depends: @, procps
 Restrictions: needs-root, allow-stderr
