@@ -1,12 +1,20 @@
-syslog-ng (3.38.1-1~1.gbpe2220d) UNRELEASED; urgency=medium
-
-  ** SNAPSHOT build @e2220d6313308be92a609c8f67da7c4ed62c483a **
+syslog-ng (3.38.1-1) unstable; urgency=medium
 
   [ Attila Szalay ]
   * Removed support upgrading from ancient (older than version 3.5) versions
   * New upstream version 3.38.1
+  * Add new files to packages
+  * Remove dangling systemd service file link at preinst (Closes: #760426)
+  * Replaces direct md5sum file access with dpkg --verify call (Closes: #905680)
+  * Introduce new package syslog-ng-scl and move all scl files to that package
+  * Clean up the autopkgtest configs
+  * Adjust bison dependency based on upstream requirements
+  * Fixing sysvinit autopkg test
+  * Merge syslog-ng-mod-getent into syslog-ng-core
+  * Merge syslog-ng-mod-map-value-pairs package into syslog-ng-core
+  * Updating the defult syslog-ng.conf to 3.38 version
 
- -- SZALAY Attila <sasa@debian.org>  Sat, 03 Sep 2022 20:30:48 +0100
+ -- SZALAY Attila <sasa@debian.org>  Sat, 10 Sep 2022 13:22:21 +0100
 
 syslog-ng (3.35.1-1) unstable; urgency=medium
 
