@@ -1,3 +1,12 @@
+syslog-ng (3.38.1-2) unstable; urgency=medium
+
+  [ Attila Szalay ]
+  * To smooth the upgrade process, re-introduce syslog-ng-mod-extra as a transitional package
+  * Fix control socket path (Closes: #962839)
+  * Select virt console destination dinamically (Closes: #982918)
+
+ -- SZALAY Attila <sasa@debian.org>  Sun, 18 Sep 2022 16:13:46 +0100
+
 syslog-ng (3.38.1-1) unstable; urgency=medium
 
   [ Attila Szalay ]
