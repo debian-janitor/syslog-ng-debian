@@ -540,6 +540,14 @@ Description: Enhanced system logging daemon (Kafka destination, based on librdka
  This package provides a native Kafka destination, written entirely in the
  C programming language, based on the librdkafka client library.
 
+Package: syslog-ng-mod-extra
+Depends: syslog-ng-scl, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+ This is a transitional package. It can safely be removed.
+
 Package: syslog-ng-scl
 Architecture: all
 Multi-Arch: foreign
