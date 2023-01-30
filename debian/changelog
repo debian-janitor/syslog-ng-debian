@@ -1,3 +1,9 @@
+syslog-ng (3.38.1-5) UNRELEASED; urgency=medium
+
+  * Build without Criterion support.
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Mon, 30 Jan 2023 19:18:56 +0100
+
 syslog-ng (3.38.1-4) unstable; urgency=medium
 
   [ Attila Szalay ]
