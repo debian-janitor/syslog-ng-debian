@@ -37,7 +37,7 @@ Build-Depends: debhelper-compat (= 13),
                librdkafka-dev (>= 1.0.0),
                pylint (>= 2.4.0) | pylint3,
 Build-Conflicts: autoconf2.13
-Standards-Version: 4.5.0
+Standards-Version: 4.6.2
 Homepage: https://www.syslog-ng.com/
 Vcs-Git: https://github.com/gcsideal/syslog-ng-debian.git
 Vcs-Browser: https://github.com/gcsideal/syslog-ng-debian
