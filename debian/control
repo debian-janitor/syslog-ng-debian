@@ -540,7 +540,6 @@ Description: Enhanced system logging daemon (Kafka destination, based on librdka
 Package: syslog-ng-mod-extra
 Depends: syslog-ng-scl, ${misc:Depends}
 Architecture: all
-Priority: optional
 Section: oldlibs
 Description: transitional package
  This is a transitional package. It can safely be removed.
